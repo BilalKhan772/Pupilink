@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1020394497792",
+    "project_id": "pupilink",
+    "storage_bucket": "pupilink.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1020394497792:android:c6d0fc028b7c024c9f35e5",
+        "android_client_info": {
+          "package_name": "com.example.pupilink"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAB9V0_s0wRXG1ZnfTf-vvoaAr_cSlHrHg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
