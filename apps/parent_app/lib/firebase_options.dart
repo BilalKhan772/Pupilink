@@ -69,20 +69,20 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyCHNoKJU5H9Arjsesu9oamatUmorpyZqc8',
-    appId: '1:1020394497792:ios:697951631d0fb1529f35e5',
+    appId: '1:1020394497792:ios:8c3178de5fc241d79f35e5',
     messagingSenderId: '1020394497792',
     projectId: 'pupilink',
     storageBucket: 'pupilink.firebasestorage.app',
-    iosBundleId: 'com.example.pupilink',
+    iosBundleId: 'com.example.parentApp',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
     apiKey: 'AIzaSyATokIgXQYVgK6UVdJXFZQgKs6QFMEjJpw',
-    appId: '1:1020394497792:web:4d085c0b9e770c879f35e5',
+    appId: '1:1020394497792:web:f0597bd2708454839f35e5',
     messagingSenderId: '1020394497792',
     projectId: 'pupilink',
     authDomain: 'pupilink.firebaseapp.com',
     storageBucket: 'pupilink.firebasestorage.app',
-    measurementId: 'G-V230844M73',
+    measurementId: 'G-NXRR34KKFC',
   );
 }

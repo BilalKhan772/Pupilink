@@ -1,0 +1,140 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /*
+     * ============================
+     * USERS
+     * ============================
+     *
+     * A user can read their own profile.
+     *
+     * During signup, a parent can create
+     * their own profile only with role=parent.
+     */
+
+    match /users/{userId} {
+
+      allow create:
+        if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == 'parent';
+
+      allow read:
+        if isSignedIn()
+        && request.auth.uid == userId;
+
+      allow update:
+        if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role;
+
+      allow delete:
+        if false;
+    }
+
+
+    /*
+     * ============================
+     * STUDENTS
+     * ============================
+     *
+     * Parent apps must NOT directly
+     * create/update/delete student data.
+     *
+     * Student data will be created by
+     * authorized school/admin systems
+     * later.
+     */
+
+    match /students/{studentId} {
+
+      allow read:
+        if isSignedIn()
+        && isParentLinkedToStudent(studentId);
+
+      allow create:
+        if isAuthorizedStaff();
+
+      allow update:
+        if isAuthorizedStaff();
+
+      allow delete:
+        if isAuthorizedStaff();
+    }
+
+
+    /*
+     * ============================
+     * PARENT-CHILD LINKS
+     * ============================
+     *
+     * Parents can read their own links.
+     *
+     * Link creation/approval/rejection
+     * will be handled by trusted Firebase
+     * Functions.
+     */
+
+    match /parent_child_links/{linkId} {
+
+      allow read:
+        if isSignedIn()
+        && resource.data.parentId == request.auth.uid;
+
+      allow create:
+        if false;
+
+      allow update:
+        if false;
+
+      allow delete:
+        if false;
+    }
+
+
+    /*
+     * ============================
+     * HELPER FUNCTIONS
+     * ============================
+     */
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+
+    function isParent() {
+      return isSignedIn()
+        && get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.role == 'parent';
+    }
+
+
+    function isAuthorizedStaff() {
+      return isSignedIn()
+        && (
+          get(
+            /databases/$(database)/documents/users/$(request.auth.uid)
+          ).data.role == 'school_staff'
+          ||
+          get(
+            /databases/$(database)/documents/users/$(request.auth.uid)
+          ).data.role == 'super_admin'
+        );
+    }
+
+
+    function isParentLinkedToStudent(studentId) {
+      return isParent()
+        && exists(
+          /databases/$(database)/documents/parent_child_links/$(request.auth.uid + '_' + studentId)
+        )
+        && get(
+          /databases/$(database)/documents/parent_child_links/$(request.auth.uid + '_' + studentId)
+        ).data.status == 'approved';
+    }
+  }
+}
