@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-class ChildProfileScreen
-    extends StatelessWidget {
+import '../../../attendance/ui/attendance_calendar_screen.dart';
+
+class ChildProfileScreen extends StatelessWidget {
   final Map<String, dynamic> child;
 
   const ChildProfileScreen({
@@ -16,23 +17,19 @@ class ChildProfileScreen
             'Unknown Student';
 
     final admissionNumber =
-        child['admissionNumber']
-                as String? ??
+        child['admissionNumber'] as String? ??
             '';
 
     final schoolName =
-        child['schoolName']
-                as String? ??
+        child['schoolName'] as String? ??
             '';
 
     final className =
-        child['className']
-                as String? ??
+        child['className'] as String? ??
             '';
 
     final section =
-        child['section']
-                as String? ??
+        child['section'] as String? ??
             '';
 
     final city =
@@ -45,7 +42,6 @@ class ChildProfileScreen
           'Child Profile',
         ),
       ),
-
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -64,8 +60,7 @@ class ChildProfileScreen
               name,
               style: const TextStyle(
                 fontSize: 24,
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
@@ -103,24 +98,26 @@ class ChildProfileScreen
             'Academic Information',
             style: TextStyle(
               fontSize: 20,
-              fontWeight:
-                  FontWeight.bold,
+              fontWeight: FontWeight.bold,
             ),
           ),
 
           const SizedBox(height: 12),
 
           _featureCard(
+            context,
             Icons.menu_book,
             'Homework',
           ),
 
           _featureCard(
+            context,
             Icons.fact_check,
             'Attendance',
           ),
 
           _featureCard(
+            context,
             Icons.assessment,
             'Results',
           ),
@@ -138,8 +135,7 @@ class ChildProfileScreen
         title: Text(
           title,
           style: const TextStyle(
-            fontWeight:
-                FontWeight.bold,
+            fontWeight: FontWeight.bold,
           ),
         ),
         subtitle: Text(
@@ -152,6 +148,7 @@ class ChildProfileScreen
   }
 
   Widget _featureCard(
+    BuildContext context,
     IconData icon,
     String title,
   ) {
@@ -163,7 +160,30 @@ class ChildProfileScreen
           Icons.arrow_forward_ios,
           size: 16,
         ),
-        onTap: () {},
+        onTap: () {
+          if (title == 'Attendance') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    AttendanceCalendarScreen(
+                  child: child,
+                ),
+              ),
+            );
+
+            return;
+          }
+
+          ScaffoldMessenger.of(context)
+              .showSnackBar(
+            SnackBar(
+              content: Text(
+                '$title feature next step mein banega.',
+              ),
+            ),
+          );
+        },
       ),
     );
   }

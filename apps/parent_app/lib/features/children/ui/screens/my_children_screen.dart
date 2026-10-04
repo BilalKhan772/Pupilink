@@ -5,6 +5,7 @@ import '../../logic/children_controller.dart';
 import '../widgets/add_child_card.dart';
 import '../widgets/child_card.dart';
 import 'connect_child_screen.dart';
+import 'child_profile_screen.dart';
 
 class MyChildrenScreen
     extends ConsumerStatefulWidget {
@@ -24,8 +25,7 @@ class _MyChildrenScreenState
     Future.microtask(() {
       ref
           .read(
-            childrenControllerProvider
-                .notifier,
+            childrenControllerProvider.notifier,
           )
           .loadChildren();
     });
@@ -41,14 +41,30 @@ class _MyChildrenScreenState
       ),
     );
 
+    if (!mounted) return;
+
     if (result == true) {
-      ref
+      await ref
           .read(
             childrenControllerProvider
                 .notifier,
           )
           .loadChildren();
     }
+  }
+
+  void _openChildProfile(
+    Map<String, dynamic> child,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ChildProfileScreen(
+          child: child,
+        ),
+      ),
+    );
   }
 
   @override
@@ -63,7 +79,6 @@ class _MyChildrenScreenState
           'My Children',
         ),
       ),
-
       body: state.isLoading
           ? const Center(
               child:
@@ -78,11 +93,9 @@ class _MyChildrenScreenState
                     )
                     .loadChildren();
               },
-
               child: ListView(
                 padding:
                     const EdgeInsets.all(20),
-
                 children: [
                   if (state.error != null)
                     Padding(
@@ -115,9 +128,7 @@ class _MyChildrenScreenState
                                 .family_restroom,
                             size: 70,
                           ),
-
                           SizedBox(height: 15),
-
                           Text(
                             'No Child Linked',
                             style: TextStyle(
@@ -126,9 +137,7 @@ class _MyChildrenScreenState
                                   FontWeight.bold,
                             ),
                           ),
-
                           SizedBox(height: 8),
-
                           Text(
                             'Abhi aapke account ke saath '
                             'koi approved child linked nahi hai.',
@@ -150,14 +159,8 @@ class _MyChildrenScreenState
                           child: ChildCard(
                             child: child,
                             onTap: () {
-                              ScaffoldMessenger
-                                  .of(context)
-                                  .showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Child Profile next step mein banega.',
-                                  ),
-                                ),
+                              _openChildProfile(
+                                child,
                               );
                             },
                           ),
