@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/logic/parent_auth_controller.dart';
 import '../../children/ui/screens/my_children_screen.dart';
+import '../../notifications/ui/parent_notifications_screen.dart';
 import '../logic/parent_dashboard_controller.dart';
 import '../../../routing/parent_router.dart';
 
@@ -50,6 +51,16 @@ class _ParentDashboardScreenState
     );
   }
 
+  void _openNotifications() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            const ParentNotificationsScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dashboardState =
@@ -59,10 +70,26 @@ class _ParentDashboardScreenState
       appBar: AppBar(
         title: const Text('Parent Dashboard'),
         actions: [
+          // --------------------------------
+          // Notifications
+          // --------------------------------
+          IconButton(
+            tooltip: 'Notifications',
+            onPressed: _openNotifications,
+            icon: const Icon(
+              Icons.notifications_outlined,
+            ),
+          ),
+
+          // --------------------------------
+          // Logout
+          // --------------------------------
           IconButton(
             tooltip: 'Logout',
             onPressed: _logout,
-            icon: const Icon(Icons.logout),
+            icon: const Icon(
+              Icons.logout,
+            ),
           ),
         ],
       ),

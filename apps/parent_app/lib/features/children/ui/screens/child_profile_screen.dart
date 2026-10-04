@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../attendance/ui/attendance_calendar_screen.dart';
+import '../../../homework/ui/homework_screen.dart';
+import '../../../results/ui/test_results_screen.dart';
+import '../../../timetable/ui/timetable_screen.dart';
 
 class ChildProfileScreen extends StatelessWidget {
   final Map<String, dynamic> child;
@@ -104,22 +107,40 @@ class ChildProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 12),
 
+          // -------------------------
+          // Homework
+          // -------------------------
           _featureCard(
             context,
             Icons.menu_book,
             'Homework',
           ),
 
+          // -------------------------
+          // Attendance
+          // -------------------------
           _featureCard(
             context,
             Icons.fact_check,
             'Attendance',
           ),
 
+          // -------------------------
+          // Results
+          // -------------------------
           _featureCard(
             context,
             Icons.assessment,
             'Results',
+          ),
+
+          // -------------------------
+          // Timetable
+          // -------------------------
+          _featureCard(
+            context,
+            Icons.calendar_month,
+            'Timetable',
           ),
         ],
       ),
@@ -161,6 +182,25 @@ class ChildProfileScreen extends StatelessWidget {
           size: 16,
         ),
         onTap: () {
+          // -------------------------
+          // Homework
+          // -------------------------
+          if (title == 'Homework') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => HomeworkScreen(
+                  child: child,
+                ),
+              ),
+            );
+
+            return;
+          }
+
+          // -------------------------
+          // Attendance
+          // -------------------------
           if (title == 'Attendance') {
             Navigator.push(
               context,
@@ -175,6 +215,41 @@ class ChildProfileScreen extends StatelessWidget {
             return;
           }
 
+          // -------------------------
+          // Results
+          // -------------------------
+          if (title == 'Results') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TestResultsScreen(
+                  child: child,
+                ),
+              ),
+            );
+
+            return;
+          }
+
+          // -------------------------
+          // Timetable
+          // -------------------------
+          if (title == 'Timetable') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TimetableScreen(
+                  child: child,
+                ),
+              ),
+            );
+
+            return;
+          }
+
+          // -------------------------
+          // Fallback
+          // -------------------------
           ScaffoldMessenger.of(context)
               .showSnackBar(
             SnackBar(

@@ -96,6 +96,47 @@ service cloud.firestore {
 
     /*
      * ============================
+     * NOTIFICATIONS
+     * ============================
+     *
+     * Parents can read only their own
+     * notifications.
+     *
+     * Parents can only update the
+     * isRead field of their own
+     * notifications.
+     *
+     * Notification creation will be
+     * handled by trusted Firebase
+     * Functions / server-side code.
+     */
+
+    match /notifications/{notificationId} {
+
+      allow read:
+        if isSignedIn()
+        && isParent()
+        && resource.data.parentId == request.auth.uid;
+
+      allow update:
+        if isSignedIn()
+        && isParent()
+        && resource.data.parentId == request.auth.uid
+        && request.resource.data.parentId == resource.data.parentId
+        && request.resource.data.diff(resource.data)
+            .affectedKeys()
+            .hasOnly(['isRead']);
+
+      allow create:
+        if false;
+
+      allow delete:
+        if false;
+    }
+
+
+    /*
+     * ============================
      * HELPER FUNCTIONS
      * ============================
      */
