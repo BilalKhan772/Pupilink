@@ -20,9 +20,7 @@ class NotificationTile extends StatelessWidget {
         notification['message'] as String? ??
             '';
 
-    final type =
-        notification['type'] as String? ??
-            'general';
+    final type = _getNotificationType();
 
     final isRead =
         notification['isRead'] == true;
@@ -36,7 +34,8 @@ class NotificationTile extends StatelessWidget {
         borderRadius:
             BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding:
+              const EdgeInsets.all(16),
           child: Row(
             crossAxisAlignment:
                 CrossAxisAlignment.start,
@@ -132,8 +131,47 @@ class NotificationTile extends StatelessWidget {
     );
   }
 
+  // --------------------------------
+  // Get notification type
+  // --------------------------------
+  String _getNotificationType() {
+    final directType =
+        notification['type'] as String? ??
+            '';
+
+    if (directType.trim().isNotEmpty &&
+        directType.toLowerCase() !=
+            'notification' &&
+        directType.toLowerCase() !=
+            'general') {
+      return directType
+          .trim()
+          .toLowerCase();
+    }
+
+    final rawData =
+        notification['data'];
+
+    if (rawData is Map) {
+      final dataType =
+          rawData['notificationType'];
+
+      if (dataType is String &&
+          dataType.trim().isNotEmpty) {
+        return dataType
+            .trim()
+            .toLowerCase();
+      }
+    }
+
+    return 'general';
+  }
+
+  // --------------------------------
+  // Notification icon
+  // --------------------------------
   IconData _getIcon(String type) {
-    switch (type.toLowerCase()) {
+    switch (type) {
       case 'homework':
         return Icons.menu_book;
 
@@ -150,13 +188,22 @@ class NotificationTile extends StatelessWidget {
       case 'announcement':
         return Icons.campaign;
 
+      case 'test_reminder':
+        return Icons.quiz;
+
+      case 'date_sheet':
+        return Icons.calendar_month;
+
       default:
         return Icons.notifications;
     }
   }
 
+  // --------------------------------
+  // Notification type label
+  // --------------------------------
   String _getTypeLabel(String type) {
-    switch (type.toLowerCase()) {
+    switch (type) {
       case 'homework':
         return 'Homework';
 
@@ -172,6 +219,12 @@ class NotificationTile extends StatelessWidget {
 
       case 'announcement':
         return 'Announcement';
+
+      case 'test_reminder':
+        return 'Test Reminder';
+
+      case 'date_sheet':
+        return 'Date Sheet';
 
       default:
         return 'Notification';

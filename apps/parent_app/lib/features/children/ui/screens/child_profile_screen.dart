@@ -4,6 +4,7 @@ import '../../../attendance/ui/attendance_calendar_screen.dart';
 import '../../../homework/ui/homework_screen.dart';
 import '../../../results/ui/test_results_screen.dart';
 import '../../../timetable/ui/timetable_screen.dart';
+import '../../../upcoming_tests/ui/upcoming_tests_screen.dart';
 
 class ChildProfileScreen extends StatelessWidget {
   final Map<String, dynamic> child;
@@ -142,6 +143,15 @@ class ChildProfileScreen extends StatelessWidget {
             Icons.calendar_month,
             'Timetable',
           ),
+
+          // -------------------------
+          // Upcoming Tests
+          // -------------------------
+          _featureCard(
+            context,
+            Icons.quiz,
+            'Upcoming Tests',
+          ),
         ],
       ),
     );
@@ -239,6 +249,23 @@ class ChildProfileScreen extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (_) => TimetableScreen(
+                  child: child,
+                ),
+              ),
+            );
+
+            return;
+          }
+
+          // -------------------------
+          // Upcoming Tests
+          // -------------------------
+          if (title == 'Upcoming Tests') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    UpcomingTestsScreen(
                   child: child,
                 ),
               ),

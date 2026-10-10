@@ -8,7 +8,9 @@ import '../logic/parent_dashboard_controller.dart';
 import '../../../routing/parent_router.dart';
 
 class ParentDashboardScreen extends ConsumerStatefulWidget {
-  const ParentDashboardScreen({super.key});
+  const ParentDashboardScreen({
+    super.key,
+  });
 
   @override
   ConsumerState<ParentDashboardScreen> createState() =>
@@ -23,14 +25,18 @@ class _ParentDashboardScreenState
 
     Future.microtask(() {
       ref
-          .read(parentDashboardControllerProvider.notifier)
+          .read(
+            parentDashboardControllerProvider.notifier,
+          )
           .loadDashboard();
     });
   }
 
   Future<void> _logout() async {
     await ref
-        .read(parentAuthControllerProvider.notifier)
+        .read(
+          parentAuthControllerProvider.notifier,
+        )
         .logout();
 
     if (!mounted) return;
@@ -46,7 +52,8 @@ class _ParentDashboardScreenState
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const MyChildrenScreen(),
+        builder: (context) =>
+            const MyChildrenScreen(),
       ),
     );
   }
@@ -64,11 +71,15 @@ class _ParentDashboardScreenState
   @override
   Widget build(BuildContext context) {
     final dashboardState =
-        ref.watch(parentDashboardControllerProvider);
+        ref.watch(
+      parentDashboardControllerProvider,
+    );
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Parent Dashboard'),
+        title: const Text(
+          'Parent Dashboard',
+        ),
         actions: [
           // --------------------------------
           // Notifications
@@ -95,7 +106,8 @@ class _ParentDashboardScreenState
       ),
       body: dashboardState.isLoading
           ? const Center(
-              child: CircularProgressIndicator(),
+              child:
+                  CircularProgressIndicator(),
             )
           : RefreshIndicator(
               onRefresh: () {
@@ -107,24 +119,31 @@ class _ParentDashboardScreenState
                     .loadDashboard();
               },
               child: ListView(
-                padding: const EdgeInsets.all(20),
+                padding:
+                    const EdgeInsets.all(20),
                 children: [
                   _buildWelcomeCard(
                     context,
-                    dashboardState.parentEmail ?? '',
+                    dashboardState.parentEmail ??
+                        '',
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(
+                    height: 20,
+                  ),
 
                   const Text(
                     'My Child',
                     style: TextStyle(
                       fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(
+                    height: 12,
+                  ),
 
                   _buildFeatureCard(
                     icon: Icons.child_care,
@@ -133,7 +152,9 @@ class _ParentDashboardScreenState
                         'Apne children ki academic information dekhein.',
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(
+                    height: 12,
+                  ),
 
                   _buildFeatureCard(
                     icon: Icons.menu_book,
@@ -142,7 +163,9 @@ class _ParentDashboardScreenState
                         'Homework aur assignments check karein.',
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(
+                    height: 12,
+                  ),
 
                   _buildFeatureCard(
                     icon: Icons.fact_check,
@@ -151,7 +174,9 @@ class _ParentDashboardScreenState
                         'Child ki attendance check karein.',
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(
+                    height: 12,
+                  ),
 
                   _buildFeatureCard(
                     icon: Icons.assessment,
@@ -160,13 +185,17 @@ class _ParentDashboardScreenState
                         'Academic results aur progress dekhein.',
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(
+                    height: 20,
+                  ),
 
                   if (dashboardState.error != null)
                     Text(
                       dashboardState.error!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      textAlign:
+                          TextAlign.center,
+                      style:
+                          const TextStyle(
                         color: Colors.red,
                       ),
                     ),
@@ -183,7 +212,8 @@ class _ParentDashboardScreenState
     return Card(
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding:
+            const EdgeInsets.all(20),
         child: Row(
           children: [
             const CircleAvatar(
@@ -194,7 +224,9 @@ class _ParentDashboardScreenState
               ),
             ),
 
-            const SizedBox(width: 16),
+            const SizedBox(
+              width: 16,
+            ),
 
             Expanded(
               child: Column(
@@ -205,18 +237,22 @@ class _ParentDashboardScreenState
                     'Welcome, Parent!',
                     style: TextStyle(
                       fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
 
-                  const SizedBox(height: 6),
+                  const SizedBox(
+                    height: 6,
+                  ),
 
                   Text(
                     email.isEmpty
                         ? 'School Progress System'
                         : email,
                     style: TextStyle(
-                      color: Colors.grey.shade700,
+                      color:
+                          Colors.grey.shade700,
                     ),
                   ),
                 ],
@@ -236,7 +272,8 @@ class _ParentDashboardScreenState
     return Card(
       elevation: 1,
       child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
+        contentPadding:
+            const EdgeInsets.all(16),
 
         leading: CircleAvatar(
           child: Icon(icon),
@@ -245,12 +282,16 @@ class _ParentDashboardScreenState
         title: Text(
           title,
           style: const TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
 
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 5),
+          padding:
+              const EdgeInsets.only(
+            top: 5,
+          ),
           child: Text(subtitle),
         ),
 
@@ -265,7 +306,8 @@ class _ParentDashboardScreenState
             return;
           }
 
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context)
+              .showSnackBar(
             SnackBar(
               content: Text(
                 '$title feature abhi development mein hai.',

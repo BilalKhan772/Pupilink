@@ -35,6 +35,31 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+   # Firebase
+  firebase_core: ^4.2.1
+  firebase_auth: ^6.1.0
+  cloud_firestore: ^6.0.3
+  cloud_functions: ^6.0.3
+
+  # State Management
+  flutter_riverpod: ^3.0.3
+
+  # Routing
+  go_router: ^16.2.4
+
+  # Shared project packages
+  school_core:
+    path: ../../packages/school_core
+
+  school_models:
+    path: ../../packages/school_models
+
+  school_design_system:
+    path: ../../packages/school_design_system
+
+  school_firebase:
+    path: ../../packages/school_firebase
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

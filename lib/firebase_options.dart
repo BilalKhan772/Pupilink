@@ -57,7 +57,6 @@ class DefaultFirebaseOptions {
     projectId: 'pupilink',
     storageBucket: 'pupilink.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyCHNoKJU5H9Arjsesu9oamatUmorpyZqc8',
     appId: '1:1020394497792:ios:697951631d0fb1529f35e5',
@@ -66,7 +65,6 @@ class DefaultFirebaseOptions {
     storageBucket: 'pupilink.firebasestorage.app',
     iosBundleId: 'com.example.pupilink',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyCHNoKJU5H9Arjsesu9oamatUmorpyZqc8',
     appId: '1:1020394497792:ios:697951631d0fb1529f35e5',

@@ -139,6 +139,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.1"
+  school_core:
+    dependency: "direct main"
+    description:
+      path: "../school_core"
+      relative: true
+    source: path
+    version: "1.0.0+1"
   sky_engine:
     dependency: transitive
     description: flutter
