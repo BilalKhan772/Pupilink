@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/logic/staff_auth_controller.dart';
+import '../../classes/ui/screens/classes_screen.dart';
 
 class SchoolAdminDashboardScreen extends ConsumerWidget {
   const SchoolAdminDashboardScreen({super.key});
@@ -16,6 +17,13 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
         title: 'Classes',
         subtitle: 'Manage school classes',
         icon: Icons.class_outlined,
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const ClassesScreen(),
+            ),
+          );
+        },
       ),
       _DashboardModule(
         title: 'Sections',
@@ -65,6 +73,22 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
                     await ref
                         .read(staffAuthControllerProvider.notifier)
                         .signOut();
+
+                    if (!context.mounted) return;
+
+                    if (ref.read(staffAuthControllerProvider).isLoggedIn) {
+                      final error = ref
+                          .read(staffAuthControllerProvider)
+                          .errorMessage;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            error ?? 'Logout nahi ho saka. Dobara try karein.',
+                          ),
+                        ),
+                      );
+                    }
                   },
             icon: const Icon(Icons.logout_rounded),
             label: const Text('Logout'),
@@ -82,14 +106,19 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Welcome, ${auth.name.isEmpty ? 'School Admin' : auth.name}',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    'Welcome, '
+                    '${auth.name.isEmpty ? 'School Admin' : auth.name}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineMedium
+                        ?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'School ID: ${auth.schoolId.isEmpty ? 'Not available' : auth.schoolId}',
+                    'School ID: '
+                    '${auth.schoolId.isEmpty ? 'Not available' : auth.schoolId}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: const Color(0xFF64748B),
                         ),
@@ -134,33 +163,49 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
                                 color: Color(0xFFE2E8F0),
                               ),
                             ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(18),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(
-                                    module.icon,
-                                    size: 30,
-                                    color: const Color(0xFF2563EB),
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    module.title,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 16,
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              onTap: module.onTap == null
+                                  ? () {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            '${module.title} module abhi connect nahi hua.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  : () => module.onTap!.call(),
+                              child: Padding(
+                                padding: const EdgeInsets.all(18),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(
+                                      module.icon,
+                                      size: 30,
+                                      color: const Color(0xFF2563EB),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    module.subtitle,
-                                    style: const TextStyle(
-                                      color: Color(0xFF64748B),
-                                      fontSize: 12,
+                                    const Spacer(),
+                                    Text(
+                                      module.title,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      module.subtitle,
+                                      style: const TextStyle(
+                                        color: Color(0xFF64748B),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           );
@@ -183,9 +228,11 @@ class _DashboardModule {
     required this.title,
     required this.subtitle,
     required this.icon,
+    this.onTap,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
+  final VoidCallback? onTap;
 }
