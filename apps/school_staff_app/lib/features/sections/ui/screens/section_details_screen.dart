@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:school_models/school_models.dart';
 
 import '../../../students/data/students_repository.dart';
+import '../../../students/ui/screens/all_students_screen.dart';
 
 class SectionDetailsScreen extends ConsumerStatefulWidget {
   const SectionDetailsScreen({
@@ -43,10 +44,12 @@ class _SectionDetailsScreenState
   }
 
   Future<void> _loadStudentCount() async {
-    setState(() {
-      _isLoadingStudents = true;
-      _studentCountError = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoadingStudents = true;
+        _studentCountError = null;
+      });
+    }
 
     try {
       final count = await ref
@@ -62,7 +65,7 @@ class _SectionDetailsScreenState
         _studentCount = count;
         _isLoadingStudents = false;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
@@ -81,6 +84,22 @@ class _SectionDetailsScreenState
           behavior: SnackBarBehavior.floating,
         ),
       );
+  }
+
+  Future<void> _openAllStudents() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => AllStudentsScreen(
+          sectionId: widget.section.id,
+          sectionName: widget.section.name,
+          className: widget.className,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      await _loadStudentCount();
+    }
   }
 
   @override
@@ -191,7 +210,11 @@ class _SectionDetailsScreenState
                 const SizedBox(height: 16),
                 _ManagementGrid(
                   onTap: (feature) {
-                    _showNotConnectedMessage(feature);
+                    if (feature == 'All Students') {
+                      _openAllStudents();
+                    } else {
+                      _showNotConnectedMessage(feature);
+                    }
                   },
                 ),
                 const SizedBox(height: 28),
@@ -442,7 +465,7 @@ class _ManagementGrid extends StatelessWidget {
     ),
     _ManagementItem(
       title: 'All Students',
-      subtitle: 'Add and manage students',
+      subtitle: 'View and manage students in this section',
       icon: Icons.groups_outlined,
     ),
   ];
@@ -639,9 +662,7 @@ class _SectionSummary extends StatelessWidget {
                       )
                     else
                       Text(
-                        isStudents
-                            ? '${studentCount ?? 0}'
-                            : '—',
+                        isStudents ? '${studentCount ?? 0}' : '—',
                         style: const TextStyle(
                           color: Color(0xFF172B24),
                           fontSize: 23,

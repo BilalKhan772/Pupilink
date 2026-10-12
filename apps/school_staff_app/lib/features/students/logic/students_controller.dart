@@ -14,20 +14,38 @@ final studentsControllerProvider =
 );
 
 class StudentsController extends Notifier<StudentsState> {
+  // Current screen ka section filter preserve karta hai.
+  // Null ka matlab school ke tamam students.
+  String? _currentSectionId;
+
   @override
   StudentsState build() => const StudentsState();
 
-  Future<void> load(String schoolId) async {
+  Future<void> load(
+    String schoolId, {
+    String? sectionId,
+  }) async {
     final id = schoolId.trim();
+    final normalizedSectionId = sectionId?.trim();
+
+    // Har load par current scope update hoga.
+    _currentSectionId =
+        normalizedSectionId == null || normalizedSectionId.isEmpty
+            ? null
+            : normalizedSectionId;
 
     if (id.isEmpty) {
       state = state.copyWith(
+        isLoading: false,
         errorMessage: 'School ID available nahi hai.',
       );
       return;
     }
 
-    state = state.copyWith(isLoading: true, clearError: true);
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+    );
 
     try {
       final studentsRepository = ref.read(studentsRepositoryProvider);
@@ -35,7 +53,10 @@ class StudentsController extends Notifier<StudentsState> {
       final sectionsRepository = ref.read(sectionsRepositoryProvider);
 
       final results = await Future.wait([
-        studentsRepository.getStudents(id),
+        studentsRepository.getStudents(
+          id,
+          sectionId: _currentSectionId,
+        ),
         classesRepository.getClasses(id),
         sectionsRepository.getSections(id),
       ]);
@@ -56,6 +77,8 @@ class StudentsController extends Notifier<StudentsState> {
   }
 
   Future<void> loadStudents() async {
+    // Explicitly unfiltered load for the normal All Students screen.
+    _currentSectionId = null;
     await load(ref.read(staffAuthControllerProvider).schoolId);
   }
 
@@ -94,7 +117,10 @@ class StudentsController extends Notifier<StudentsState> {
       return false;
     }
 
-    state = state.copyWith(isSaving: true, clearError: true);
+    state = state.copyWith(
+      isSaving: true,
+      clearError: true,
+    );
 
     try {
       await ref.read(studentsRepositoryProvider).addStudent(
@@ -109,10 +135,17 @@ class StudentsController extends Notifier<StudentsState> {
             sectionName: selectedSection.first.name,
           );
 
-      await load(schoolId);
+      // Existing section filter ko preserve karein.
+      await load(
+        schoolId,
+        sectionId: _currentSectionId,
+      );
+
       return state.errorMessage == null;
     } catch (error) {
-      state = state.copyWith(errorMessage: _friendlyError(error));
+      state = state.copyWith(
+        errorMessage: _friendlyError(error),
+      );
       return false;
     } finally {
       state = state.copyWith(isSaving: false);
@@ -152,7 +185,10 @@ class StudentsController extends Notifier<StudentsState> {
       return false;
     }
 
-    state = state.copyWith(isSaving: true, clearError: true);
+    state = state.copyWith(
+      isSaving: true,
+      clearError: true,
+    );
 
     try {
       await ref.read(studentsRepositoryProvider).updateStudent(
@@ -169,10 +205,18 @@ class StudentsController extends Notifier<StudentsState> {
             isActive: student.isActive,
           );
 
-      await load(schoolId);
+      // Agar student section change kare, current section list
+      // sirf usi section ke students dikhayegi.
+      await load(
+        schoolId,
+        sectionId: _currentSectionId,
+      );
+
       return state.errorMessage == null;
     } catch (error) {
-      state = state.copyWith(errorMessage: _friendlyError(error));
+      state = state.copyWith(
+        errorMessage: _friendlyError(error),
+      );
       return false;
     } finally {
       state = state.copyWith(isSaving: false);
@@ -190,7 +234,10 @@ class StudentsController extends Notifier<StudentsState> {
       return false;
     }
 
-    state = state.copyWith(isSaving: true, clearError: true);
+    state = state.copyWith(
+      isSaving: true,
+      clearError: true,
+    );
 
     try {
       await ref.read(studentsRepositoryProvider).setStudentActive(
@@ -199,10 +246,17 @@ class StudentsController extends Notifier<StudentsState> {
             isActive: isActive,
           );
 
-      await load(schoolId);
+      // Status update ke baad bhi section filter retain rahega.
+      await load(
+        schoolId,
+        sectionId: _currentSectionId,
+      );
+
       return state.errorMessage == null;
     } catch (error) {
-      state = state.copyWith(errorMessage: _friendlyError(error));
+      state = state.copyWith(
+        errorMessage: _friendlyError(error),
+      );
       return false;
     } finally {
       state = state.copyWith(isSaving: false);

@@ -17,9 +17,32 @@ class StudentsRepository {
   CollectionReference<Map<String, dynamic>> get _students =>
       _firestore.collection(FirestorePaths.students);
 
-  Future<List<Student>> getStudents(String schoolId) async {
-    final snapshot =
-        await _students.where('schoolId', isEqualTo: schoolId).get();
+  /// sectionId null/empty ho to school ke tamam students.
+  /// sectionId diya ho to sirf us section ke students.
+  Future<List<Student>> getStudents(
+    String schoolId, {
+    String? sectionId,
+  }) async {
+    final normalizedSchoolId = schoolId.trim();
+    final normalizedSectionId = sectionId?.trim() ?? '';
+
+    if (normalizedSchoolId.isEmpty) {
+      return <Student>[];
+    }
+
+    Query<Map<String, dynamic>> query = _students.where(
+      'schoolId',
+      isEqualTo: normalizedSchoolId,
+    );
+
+    if (normalizedSectionId.isNotEmpty) {
+      query = query.where(
+        'sectionId',
+        isEqualTo: normalizedSectionId,
+      );
+    }
+
+    final snapshot = await query.get();
 
     final students = snapshot.docs
         .map((doc) => Student.fromMap(doc.id, doc.data()))
@@ -37,9 +60,16 @@ class StudentsRepository {
     required String schoolId,
     required String sectionId,
   }) async {
+    final normalizedSchoolId = schoolId.trim();
+    final normalizedSectionId = sectionId.trim();
+
+    if (normalizedSchoolId.isEmpty || normalizedSectionId.isEmpty) {
+      return 0;
+    }
+
     final snapshot = await _students
-        .where('schoolId', isEqualTo: schoolId)
-        .where('sectionId', isEqualTo: sectionId)
+        .where('schoolId', isEqualTo: normalizedSchoolId)
+        .where('sectionId', isEqualTo: normalizedSectionId)
         .count()
         .get();
 
@@ -50,10 +80,15 @@ class StudentsRepository {
     required String schoolId,
     required String admissionNumber,
   }) async {
+    final normalizedSchoolId = schoolId.trim();
     final normalized = admissionNumber.trim().toLowerCase();
 
+    if (normalizedSchoolId.isEmpty || normalized.isEmpty) {
+      return null;
+    }
+
     final snapshot = await _students
-        .where('schoolId', isEqualTo: schoolId)
+        .where('schoolId', isEqualTo: normalizedSchoolId)
         .get();
 
     for (final doc in snapshot.docs) {
@@ -78,22 +113,28 @@ class StudentsRepository {
     required String sectionId,
     required String sectionName,
   }) async {
+    final normalizedSchoolId = schoolId.trim();
     final normalizedName = name.trim();
     final normalizedAdmission = admissionNumber.trim();
+    final normalizedSectionId = sectionId.trim();
 
-    if (schoolId.trim().isEmpty) {
+    if (normalizedSchoolId.isEmpty) {
       throw ArgumentError('School ID available nahi hai.');
     }
 
     if (normalizedName.isEmpty ||
         normalizedAdmission.isEmpty ||
         city.trim().isEmpty ||
-        schoolName.trim().isEmpty) {
+        schoolName.trim().isEmpty ||
+        classId.trim().isEmpty ||
+        className.trim().isEmpty ||
+        normalizedSectionId.isEmpty ||
+        sectionName.trim().isEmpty) {
       throw ArgumentError('Tamam required fields fill karein.');
     }
 
     final duplicate = await findByAdmissionNumber(
-      schoolId: schoolId,
+      schoolId: normalizedSchoolId,
       admissionNumber: normalizedAdmission,
     );
 
@@ -106,16 +147,16 @@ class StudentsRepository {
       name: normalizedName,
       admissionNumber: normalizedAdmission,
       city: city.trim(),
-      schoolId: schoolId,
+      schoolId: normalizedSchoolId,
       schoolName: schoolName.trim(),
-      className: className,
-      section: sectionName,
+      className: className.trim(),
+      section: sectionName.trim(),
       isActive: true,
     );
 
     final data = student.toMap()
-      ..['classId'] = classId
-      ..['sectionId'] = sectionId
+      ..['classId'] = classId.trim()
+      ..['sectionId'] = normalizedSectionId
       ..['createdAt'] = FieldValue.serverTimestamp()
       ..['updatedAt'] = FieldValue.serverTimestamp();
 
@@ -135,22 +176,30 @@ class StudentsRepository {
     required String sectionName,
     required bool isActive,
   }) async {
+    final normalizedSchoolId = schoolId.trim();
     final normalizedName = name.trim();
     final normalizedAdmission = admissionNumber.trim();
 
-    if (normalizedName.isEmpty || normalizedAdmission.isEmpty) {
-      throw ArgumentError('Student name aur admission number required hain.');
+    if (normalizedSchoolId.isEmpty ||
+        normalizedName.isEmpty ||
+        normalizedAdmission.isEmpty) {
+      throw ArgumentError(
+        'School ID, student name aur admission number required hain.',
+      );
     }
 
-    final ref = _students.doc(studentId);
-    final current = await ref.get();
+    final studentRef = _students.doc(studentId);
+    final current = await studentRef.get();
 
-    if (!current.exists || current.data()?['schoolId'] != schoolId) {
-      throw Exception('Student nahi mila ya school access match nahi karta.');
+    if (!current.exists ||
+        current.data()?['schoolId'] != normalizedSchoolId) {
+      throw Exception(
+        'Student nahi mila ya school access match nahi karta.',
+      );
     }
 
     final duplicate = await findByAdmissionNumber(
-      schoolId: schoolId,
+      schoolId: normalizedSchoolId,
       admissionNumber: normalizedAdmission,
     );
 
@@ -158,15 +207,15 @@ class StudentsRepository {
       throw Exception('Yeh admission number kisi doosray student ka hai.');
     }
 
-    await ref.update({
+    await studentRef.update({
       'name': normalizedName,
       'admissionNumber': normalizedAdmission,
       'city': city.trim(),
       'schoolName': schoolName.trim(),
-      'classId': classId,
-      'className': className,
-      'sectionId': sectionId,
-      'section': sectionName,
+      'classId': classId.trim(),
+      'className': className.trim(),
+      'sectionId': sectionId.trim(),
+      'section': sectionName.trim(),
       'isActive': isActive,
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -177,14 +226,18 @@ class StudentsRepository {
     required String schoolId,
     required bool isActive,
   }) async {
-    final ref = _students.doc(studentId);
-    final snapshot = await ref.get();
+    final normalizedSchoolId = schoolId.trim();
+    final studentRef = _students.doc(studentId);
+    final snapshot = await studentRef.get();
 
-    if (!snapshot.exists || snapshot.data()?['schoolId'] != schoolId) {
-      throw Exception('Student nahi mila ya school access match nahi karta.');
+    if (!snapshot.exists ||
+        snapshot.data()?['schoolId'] != normalizedSchoolId) {
+      throw Exception(
+        'Student nahi mila ya school access match nahi karta.',
+      );
     }
 
-    await ref.update({
+    await studentRef.update({
       'isActive': isActive,
       'updatedAt': FieldValue.serverTimestamp(),
     });
