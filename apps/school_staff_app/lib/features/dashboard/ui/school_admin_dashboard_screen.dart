@@ -1,9 +1,10 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/logic/staff_auth_controller.dart';
 import '../../classes/ui/screens/classes_screen.dart';
+import '../../sections/ui/screens/sections_screen.dart';
+import '../../students/ui/screens/all_students_screen.dart';
 
 class SchoolAdminDashboardScreen extends ConsumerWidget {
   const SchoolAdminDashboardScreen({super.key});
@@ -29,6 +30,13 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
         title: 'Sections',
         subtitle: 'Manage class sections',
         icon: Icons.grid_view_rounded,
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const SectionsScreen(),
+            ),
+          );
+        },
       ),
       _DashboardModule(
         title: 'Teachers',
@@ -39,6 +47,13 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
         title: 'Students',
         subtitle: 'Student records',
         icon: Icons.school_outlined,
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const AllStudentsScreen(),
+            ),
+          );
+        },
       ),
       _DashboardModule(
         title: 'Attendance',
@@ -76,7 +91,9 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
 
                     if (!context.mounted) return;
 
-                    if (ref.read(staffAuthControllerProvider).isLoggedIn) {
+                    if (ref
+                        .read(staffAuthControllerProvider)
+                        .isLoggedIn) {
                       final error = ref
                           .read(staffAuthControllerProvider)
                           .errorMessage;
@@ -84,7 +101,8 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            error ?? 'Logout nahi ho saka. Dobara try karein.',
+                            error ??
+                                'Logout nahi ho saka. Dobara try karein.',
                           ),
                         ),
                       );
@@ -165,18 +183,17 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: InkWell(
-                              onTap: module.onTap == null
-                                  ? () {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            '${module.title} module abhi connect nahi hua.',
-                                          ),
+                              onTap: module.onTap ??
+                                  () {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          '${module.title} module abhi connect nahi hua.',
                                         ),
-                                      );
-                                    }
-                                  : () => module.onTap!.call(),
+                                      ),
+                                    );
+                                  },
                               child: Padding(
                                 padding: const EdgeInsets.all(18),
                                 child: Column(
