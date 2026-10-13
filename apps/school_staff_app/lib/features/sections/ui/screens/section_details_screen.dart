@@ -5,6 +5,8 @@ import 'package:school_models/school_models.dart';
 
 import '../../../students/data/students_repository.dart';
 import '../../../students/ui/screens/all_students_screen.dart';
+import '../../data/subjects_teacher_repository.dart';
+import 'subjects_teacher_screen.dart';
 
 class SectionDetailsScreen extends ConsumerStatefulWidget {
   const SectionDetailsScreen({
@@ -37,10 +39,16 @@ class _SectionDetailsScreenState
   bool _isLoadingStudents = true;
   String? _studentCountError;
 
+  int? _subjectsCount;
+  int? _teachersCount;
+  bool _isLoadingSectionSummary = true;
+  String? _sectionSummaryError;
+
   @override
   void initState() {
     super.initState();
     _loadStudentCount();
+    _loadSectionSummary();
   }
 
   Future<void> _loadStudentCount() async {
@@ -75,6 +83,55 @@ class _SectionDetailsScreenState
     }
   }
 
+  Future<void> _loadSectionSummary() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingSectionSummary = true;
+      _sectionSummaryError = null;
+    });
+
+    try {
+      final repository = SubjectsTeacherRepository();
+
+      final assignments = await repository.getAssignments(
+        schoolId: widget.section.schoolId,
+        sectionId: widget.section.id,
+      );
+
+      if (!mounted) return;
+
+      final activeAssignments = assignments
+          .where((assignment) => assignment.isActive)
+          .toList();
+
+      final subjectIds = activeAssignments
+          .map((assignment) => assignment.subjectId)
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      final teacherIds = activeAssignments
+          .map((assignment) => assignment.teacherId)
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      setState(() {
+        _subjectsCount = subjectIds.length;
+        _teachersCount = teacherIds.length;
+        _isLoadingSectionSummary = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _sectionSummaryError =
+            'Subjects aur teachers ka data load nahi ho saka.';
+        _isLoadingSectionSummary = false;
+      });
+    }
+  }
+
   void _showNotConnectedMessage(String feature) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -88,7 +145,7 @@ class _SectionDetailsScreenState
 
   Future<void> _openAllStudents() async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => AllStudentsScreen(
           sectionId: widget.section.id,
           sectionName: widget.section.name,
@@ -99,6 +156,22 @@ class _SectionDetailsScreenState
 
     if (mounted) {
       await _loadStudentCount();
+    }
+  }
+
+  Future<void> _openSubjectsTeacher() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => SubjectsTeacherScreen(
+          section: widget.section,
+          className: widget.className,
+          repository: SubjectsTeacherRepository(),
+        ),
+      ),
+    );
+
+    if (mounted) {
+      await _loadSectionSummary();
     }
   }
 
@@ -116,7 +189,10 @@ class _SectionDetailsScreenState
         leading: IconButton(
           tooltip: 'Go back',
           onPressed: () => Navigator.of(context).maybePop(),
-          icon: const Icon(Icons.arrow_back_rounded, color: _darkGreen),
+          icon: const Icon(
+            Icons.arrow_back_rounded,
+            color: _darkGreen,
+          ),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,7 +214,10 @@ class _SectionDetailsScreenState
         actions: [
           PopupMenuButton<String>(
             tooltip: 'More options',
-            icon: const Icon(Icons.more_vert_rounded, color: _darkGreen),
+            icon: const Icon(
+              Icons.more_vert_rounded,
+              color: _darkGreen,
+            ),
             onSelected: (value) {
               if (value == 'edit') {
                 widget.onEdit();
@@ -147,7 +226,7 @@ class _SectionDetailsScreenState
               }
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(
+              const PopupMenuItem<String>(
                 value: 'edit',
                 child: ListTile(
                   leading: Icon(Icons.edit_outlined),
@@ -155,7 +234,7 @@ class _SectionDetailsScreenState
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-              PopupMenuItem(
+              PopupMenuItem<String>(
                 value: 'status',
                 child: ListTile(
                   leading: Icon(
@@ -205,13 +284,19 @@ class _SectionDetailsScreenState
                 const SizedBox(height: 6),
                 const Text(
                   'Manage attendance, students and other section activities.',
-                  style: TextStyle(color: _muted, fontSize: 13, height: 1.5),
+                  style: TextStyle(
+                    color: _muted,
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 _ManagementGrid(
                   onTap: (feature) {
                     if (feature == 'All Students') {
                       _openAllStudents();
+                    } else if (feature == 'Subjects & Teacher') {
+                      _openSubjectsTeacher();
                     } else {
                       _showNotConnectedMessage(feature);
                     }
@@ -232,6 +317,11 @@ class _SectionDetailsScreenState
                   isLoadingStudents: _isLoadingStudents,
                   studentCountError: _studentCountError,
                   onRetry: _loadStudentCount,
+                  subjectsCount: _subjectsCount,
+                  teachersCount: _teachersCount,
+                  isLoadingSectionSummary: _isLoadingSectionSummary,
+                  sectionSummaryError: _sectionSummaryError,
+                  onRetrySectionSummary: _loadSectionSummary,
                 ),
                 const SizedBox(height: 24),
                 Container(
@@ -239,7 +329,9 @@ class _SectionDetailsScreenState
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFE4ECE6)),
+                    border: Border.all(
+                      color: const Color(0xFFE4ECE6),
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -414,7 +506,10 @@ class _SectionHeaderCard extends StatelessWidget {
               children: [
                 identity,
                 const SizedBox(height: 20),
-                SizedBox(width: double.infinity, child: editButton),
+                SizedBox(
+                  width: double.infinity,
+                  child: editButton,
+                ),
               ],
             );
           }
@@ -510,7 +605,10 @@ class _ManagementItem {
 }
 
 class _ManagementCard extends StatelessWidget {
-  const _ManagementCard({required this.item, required this.onTap});
+  const _ManagementCard({
+    required this.item,
+    required this.onTap,
+  });
 
   final _ManagementItem item;
   final VoidCallback onTap;
@@ -591,6 +689,11 @@ class _SectionSummary extends StatelessWidget {
     required this.isLoadingStudents,
     required this.studentCountError,
     required this.onRetry,
+    required this.subjectsCount,
+    required this.teachersCount,
+    required this.isLoadingSectionSummary,
+    required this.sectionSummaryError,
+    required this.onRetrySectionSummary,
   });
 
   final int? studentCount;
@@ -598,21 +701,44 @@ class _SectionSummary extends StatelessWidget {
   final String? studentCountError;
   final VoidCallback onRetry;
 
+  final int? subjectsCount;
+  final int? teachersCount;
+  final bool isLoadingSectionSummary;
+  final String? sectionSummaryError;
+  final VoidCallback onRetrySectionSummary;
+
   @override
   Widget build(BuildContext context) {
     const items = [
-      _SummaryItem(title: 'Students', icon: Icons.groups_outlined),
-      _SummaryItem(title: 'Subjects', icon: Icons.menu_book_outlined),
-      _SummaryItem(title: 'Teachers', icon: Icons.co_present_outlined),
-      _SummaryItem(title: 'Monitor', icon: Icons.verified_user_outlined),
+      _SummaryItem(
+        title: 'Students',
+        icon: Icons.groups_outlined,
+      ),
+      _SummaryItem(
+        title: 'Subjects',
+        icon: Icons.menu_book_outlined,
+      ),
+      _SummaryItem(
+        title: 'Teachers',
+        icon: Icons.co_present_outlined,
+      ),
+      _SummaryItem(
+        title: 'Monitor',
+        icon: Icons.verified_user_outlined,
+      ),
     ];
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 22),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 22,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFFF0F7F2),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE4EEE6)),
+        border: Border.all(
+          color: const Color(0xFFE4EEE6),
+        ),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -626,6 +752,29 @@ class _SectionSummary extends StatelessWidget {
             runSpacing: 20,
             children: items.map((item) {
               final isStudents = item.title == 'Students';
+              final isSubjects = item.title == 'Subjects';
+              final isTeachers = item.title == 'Teachers';
+              final isMonitor = item.title == 'Monitor';
+
+              final isLoading = isStudents
+                  ? isLoadingStudents
+                  : (isSubjects || isTeachers)
+                      ? isLoadingSectionSummary
+                      : false;
+
+              final hasError = isStudents
+                  ? studentCountError != null
+                  : (isSubjects || isTeachers)
+                      ? sectionSummaryError != null
+                      : false;
+
+              final int? count = isStudents
+                  ? studentCount
+                  : isSubjects
+                      ? subjectsCount
+                      : isTeachers
+                          ? teachersCount
+                          : null;
 
               return SizedBox(
                 width: itemWidth,
@@ -645,16 +794,20 @@ class _SectionSummary extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    if (isStudents && isLoadingStudents)
+                    if (isLoading)
                       const SizedBox(
                         height: 28,
                         width: 28,
-                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                        ),
                       )
-                    else if (isStudents && studentCountError != null)
+                    else if (hasError)
                       IconButton(
-                        tooltip: 'Retry loading student count',
-                        onPressed: onRetry,
+                        tooltip: 'Retry loading count',
+                        onPressed: isStudents
+                            ? onRetry
+                            : onRetrySectionSummary,
                         icon: const Icon(
                           Icons.refresh_rounded,
                           color: Color(0xFF138A4B),
@@ -662,7 +815,7 @@ class _SectionSummary extends StatelessWidget {
                       )
                     else
                       Text(
-                        isStudents ? '${studentCount ?? 0}' : '—',
+                        isMonitor ? '—' : '${count ?? 0}',
                         style: const TextStyle(
                           color: Color(0xFF172B24),
                           fontSize: 23,
@@ -679,7 +832,7 @@ class _SectionSummary extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (isStudents && studentCountError != null)
+                    if (hasError)
                       const Padding(
                         padding: EdgeInsets.only(top: 4),
                         child: Text(
@@ -702,7 +855,10 @@ class _SectionSummary extends StatelessWidget {
 }
 
 class _SummaryItem {
-  const _SummaryItem({required this.title, required this.icon});
+  const _SummaryItem({
+    required this.title,
+    required this.icon,
+  });
 
   final String title;
   final IconData icon;

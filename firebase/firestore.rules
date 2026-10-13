@@ -1,172 +1,55 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /*
-     * ============================
-     * USERS
-     * ============================
-     *
-     * A user can read their own profile.
-     *
-     * During signup, a parent can create
-     * their own profile only with role=parent.
-     */
-
-    match /users/{userId} {
-
-      allow create:
-        if isSignedIn()
-        && request.auth.uid == userId
-        && request.resource.data.role == 'parent';
-
-      allow read:
-        if isSignedIn()
-        && request.auth.uid == userId;
-
-      allow update:
-        if isSignedIn()
-        && request.auth.uid == userId
-        && request.resource.data.role == resource.data.role;
-
-      allow delete:
-        if false;
-    }
-
-
-    /*
-     * ============================
-     * STUDENTS
-     * ============================
-     *
-     * Parent apps must NOT directly
-     * create/update/delete student data.
-     *
-     * Student data will be created by
-     * authorized school/admin systems
-     * later.
-     */
-
-    match /students/{studentId} {
-
-      allow read:
-        if isSignedIn()
-        && isParentLinkedToStudent(studentId);
-
-      allow create:
-        if isAuthorizedStaff();
-
-      allow update:
-        if isAuthorizedStaff();
-
-      allow delete:
-        if isAuthorizedStaff();
-    }
-
-
-    /*
-     * ============================
-     * PARENT-CHILD LINKS
-     * ============================
-     *
-     * Parents can read their own links.
-     *
-     * Link creation/approval/rejection
-     * will be handled by trusted Firebase
-     * Functions.
-     */
-
-    match /parent_child_links/{linkId} {
-
-      allow read:
-        if isSignedIn()
-        && resource.data.parentId == request.auth.uid;
-
-      allow create:
-        if false;
-
-      allow update:
-        if false;
-
-      allow delete:
-        if false;
-    }
-
-
-    /*
-     * ============================
-     * NOTIFICATIONS
-     * ============================
-     *
-     * Parents can read only their own
-     * notifications.
-     *
-     * Parents can only update the
-     * isRead field of their own
-     * notifications.
-     *
-     * Notification creation will be
-     * handled by trusted Firebase
-     * Functions / server-side code.
-     */
-
-    match /notifications/{notificationId} {
-
-      allow read:
-        if isSignedIn()
-        && isParent()
-        && resource.data.parentId == request.auth.uid;
-
-      allow update:
-        if isSignedIn()
-        && isParent()
-        && resource.data.parentId == request.auth.uid
-        && request.resource.data.parentId == resource.data.parentId
-        && request.resource.data.diff(resource.data)
-            .affectedKeys()
-            .hasOnly(['isRead']);
-
-      allow create:
-        if false;
-
-      allow delete:
-        if false;
-    }
-
-
-    /*
-     * ============================
-     * HELPER FUNCTIONS
-     * ============================
-     */
+    // ============================
+    // HELPER FUNCTIONS
+    // ============================
 
     function isSignedIn() {
       return request.auth != null;
     }
 
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasUserProfile() {
+      return isSignedIn() && exists(userPath());
+    }
+
+    function userData() {
+      return get(userPath()).data;
+    }
 
     function isParent() {
-      return isSignedIn()
-        && get(
-          /databases/$(database)/documents/users/$(request.auth.uid)
-        ).data.role == 'parent';
+      return hasUserProfile()
+        && userData().role == 'parent';
     }
 
-
-    function isAuthorizedStaff() {
-      return isSignedIn()
-        && (
-          get(
-            /databases/$(database)/documents/users/$(request.auth.uid)
-          ).data.role == 'school_staff'
-          ||
-          get(
-            /databases/$(database)/documents/users/$(request.auth.uid)
-          ).data.role == 'super_admin'
-        );
+    function isSchoolStaff() {
+      return hasUserProfile()
+        && userData().role in [
+          'schoolAdmin',
+          'classTeacher',
+          'subjectTeacher',
+          'monitor'
+        ]
+        && userData().schoolId is string
+        && userData().schoolId.size() > 0;
     }
 
+    function isSchoolAdmin() {
+      return isSchoolStaff()
+        && userData().role == 'schoolAdmin';
+    }
+
+    function staffBelongsToSchool(schoolId) {
+      return isSchoolStaff()
+        && userData().schoolId == schoolId;
+    }
 
     function isParentLinkedToStudent(studentId) {
       return isParent()
@@ -176,6 +59,239 @@ service cloud.firestore {
         && get(
           /databases/$(database)/documents/parent_child_links/$(request.auth.uid + '_' + studentId)
         ).data.status == 'approved';
+    }
+
+    function teacherBelongsToSchool(teacherId, schoolId) {
+      return exists(
+          /databases/$(database)/documents/users/$(teacherId)
+        )
+        && get(
+          /databases/$(database)/documents/users/$(teacherId)
+        ).data.schoolId == schoolId
+        && get(
+          /databases/$(database)/documents/users/$(teacherId)
+        ).data.role in ['classTeacher', 'subjectTeacher']
+        && get(
+          /databases/$(database)/documents/users/$(teacherId)
+        ).data.isActive != false;
+    }
+
+    function subjectBelongsToSchool(subjectId, schoolId) {
+      return exists(
+          /databases/$(database)/documents/subjects/$(subjectId)
+        )
+        && get(
+          /databases/$(database)/documents/subjects/$(subjectId)
+        ).data.schoolId == schoolId
+        && get(
+          /databases/$(database)/documents/subjects/$(subjectId)
+        ).data.isActive == true;
+    }
+
+    function sectionBelongsToSchool(sectionId, schoolId, classId) {
+      return exists(
+          /databases/$(database)/documents/sections/$(sectionId)
+        )
+        && get(
+          /databases/$(database)/documents/sections/$(sectionId)
+        ).data.schoolId == schoolId
+        && get(
+          /databases/$(database)/documents/sections/$(sectionId)
+        ).data.classId == classId;
+    }
+
+    function classBelongsToSchool(classId, schoolId) {
+      return exists(
+          /databases/$(database)/documents/classes/$(classId)
+        )
+        && get(
+          /databases/$(database)/documents/classes/$(classId)
+        ).data.schoolId == schoolId;
+    }
+
+    function validAssignment(data) {
+      return data.schoolId == userData().schoolId
+        && data.teacherId is string
+        && data.classId is string
+        && data.sectionId is string
+        && data.subjectId is string
+        && teacherBelongsToSchool(data.teacherId, data.schoolId)
+        && subjectBelongsToSchool(data.subjectId, data.schoolId)
+        && classBelongsToSchool(data.classId, data.schoolId)
+        && sectionBelongsToSchool(
+          data.sectionId,
+          data.schoolId,
+          data.classId
+        );
+    }
+
+    // ============================
+    // USERS
+    // ============================
+
+    match /users/{userId} {
+
+      // Parent signup only.
+      // Staff accounts must be created by trusted functions.
+      allow create:
+        if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == 'parent';
+
+      // Users can read their own profile.
+      // School staff can read profiles belonging to their school.
+      allow read:
+        if isSignedIn()
+        && (
+          request.auth.uid == userId
+          || (
+            isSchoolStaff()
+            && resource.data.schoolId == userData().schoolId
+          )
+        );
+
+      // Users cannot change their own role or school.
+      allow update:
+        if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.schoolId == resource.data.schoolId;
+
+      allow delete: if false;
+    }
+
+    // ============================
+    // STUDENTS
+    // ============================
+
+    match /students/{studentId} {
+
+      // Parents can read approved linked students.
+      // Staff can read students from their own school.
+      allow read:
+        if (
+          isParent()
+          && isParentLinkedToStudent(studentId)
+        )
+        || (
+          isSchoolStaff()
+          && resource.data.schoolId == userData().schoolId
+        );
+
+      allow create:
+        if isSchoolAdmin()
+        && request.resource.data.schoolId == userData().schoolId;
+
+      allow update:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId
+        && request.resource.data.schoolId == userData().schoolId;
+
+      allow delete:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId;
+    }
+
+    // ============================
+    // PARENT-CHILD LINKS
+    // ============================
+
+    match /parent_child_links/{linkId} {
+
+      allow read:
+        if isSignedIn()
+        && resource.data.parentId == request.auth.uid;
+
+      // Link creation and approval use trusted functions.
+      allow create, update, delete: if false;
+    }
+
+    // ============================
+    // NOTIFICATIONS
+    // ============================
+
+    match /notifications/{notificationId} {
+
+      allow read:
+        if isParent()
+        && resource.data.parentId == request.auth.uid;
+
+      allow update:
+        if isParent()
+        && resource.data.parentId == request.auth.uid
+        && request.resource.data.parentId == resource.data.parentId
+        && request.resource.data.diff(resource.data)
+            .affectedKeys()
+            .hasOnly(['isRead']);
+
+      allow create, delete: if false;
+    }
+
+    // ============================
+    // SUBJECTS
+    // ============================
+
+    match /subjects/{subjectId} {
+
+      allow read:
+        if isSchoolStaff()
+        && resource.data.schoolId == userData().schoolId;
+
+      allow create:
+        if isSchoolAdmin()
+        && request.resource.data.schoolId == userData().schoolId
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.isActive == true;
+
+      allow update:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId
+        && request.resource.data.schoolId == userData().schoolId;
+
+      allow delete:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId;
+    }
+
+    // ============================
+    // STAFF COLLECTION
+    // ============================
+
+    match /staff/{staffId} {
+
+      allow read:
+        if isSchoolStaff()
+        && resource.data.schoolId == userData().schoolId;
+
+      // Staff accounts must be managed by trusted backend functions.
+      allow create, update, delete: if false;
+    }
+
+    // ============================
+    // TEACHER ASSIGNMENTS
+    // ============================
+
+    match /teacherAssignments/{assignmentId} {
+
+      allow read:
+        if isSchoolStaff()
+        && resource.data.schoolId == userData().schoolId;
+
+      allow create:
+        if isSchoolAdmin()
+        && validAssignment(request.resource.data);
+
+      // Allows same-school admins to change/reassign an assignment
+      // while keeping all linked records valid.
+      allow update:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId
+        && validAssignment(request.resource.data);
+
+      allow delete:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId;
     }
   }
 }
