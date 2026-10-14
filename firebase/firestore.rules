@@ -293,5 +293,159 @@ service cloud.firestore {
         if isSchoolAdmin()
         && resource.data.schoolId == userData().schoolId;
     }
+
+        // ============================
+    // SCHOOL TESTS
+    // ============================
+
+    function hasActiveSubjectAssignment(sectionId, subjectId, schoolId) {
+      return exists(
+          /databases/$(database)/documents/teacherAssignments/$(sectionId + '_' + subjectId)
+        )
+        && get(
+          /databases/$(database)/documents/teacherAssignments/$(sectionId + '_' + subjectId)
+        ).data.schoolId == schoolId
+        && get(
+          /databases/$(database)/documents/teacherAssignments/$(sectionId + '_' + subjectId)
+        ).data.sectionId == sectionId
+        && get(
+          /databases/$(database)/documents/teacherAssignments/$(sectionId + '_' + subjectId)
+        ).data.subjectId == subjectId
+        && get(
+          /databases/$(database)/documents/teacherAssignments/$(sectionId + '_' + subjectId)
+        ).data.teacherId == request.auth.uid
+        && get(
+          /databases/$(database)/documents/teacherAssignments/$(sectionId + '_' + subjectId)
+        ).data.isActive == true;
+    }
+
+    function validTestData(data) {
+      return isSchoolStaff()
+        && data.schoolId == userData().schoolId
+        && data.title is string
+        && data.title.size() > 0
+        && data.sectionId is string
+        && data.subjectId is string
+        && data.totalMarks is number
+        && data.totalMarks > 0
+        && data.passingMarks is number
+        && data.passingMarks >= 0
+        && data.passingMarks <= data.totalMarks
+        && (
+          isSchoolAdmin()
+          || (
+            userData().role == 'subjectTeacher'
+            && hasActiveSubjectAssignment(
+              data.sectionId,
+              data.subjectId,
+              data.schoolId
+            )
+          )
+        );
+    }
+
+    match /tests/{testId} {
+      allow read: if isSchoolStaff()
+        && resource.data.schoolId == userData().schoolId
+        && (
+          isSchoolAdmin()
+          || (
+            userData().role == 'subjectTeacher'
+            && hasActiveSubjectAssignment(
+              resource.data.sectionId,
+              resource.data.subjectId,
+              resource.data.schoolId
+            )
+          )
+        );
+
+      allow create: if validTestData(request.resource.data)
+        && request.resource.data.createdBy == request.auth.uid;
+
+      allow update: if validTestData(request.resource.data)
+        && resource.data.schoolId == userData().schoolId
+        && (
+          isSchoolAdmin()
+          || (
+            userData().role == 'subjectTeacher'
+            && hasActiveSubjectAssignment(
+              resource.data.sectionId,
+              resource.data.subjectId,
+              resource.data.schoolId
+            )
+          )
+        );
+
+      allow delete: if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId;
+    }
+
+    // ============================
+    // STUDENT MARKS
+    // ============================
+
+    function validStudentMark(data) {
+      return isSchoolStaff()
+        && data.schoolId == userData().schoolId
+        && data.studentId is string
+        && data.examId is string
+        && data.sectionId is string
+        && data.subjectId is string
+        && data.obtainedMarks is number
+        && data.totalMarks is number
+        && data.totalMarks > 0
+        && data.obtainedMarks >= 0
+        && data.obtainedMarks <= data.totalMarks
+        && exists(
+          /databases/$(database)/documents/tests/$(data.examId)
+        )
+        && get(
+          /databases/$(database)/documents/tests/$(data.examId)
+        ).data.schoolId == data.schoolId
+        && get(
+          /databases/$(database)/documents/tests/$(data.examId)
+        ).data.sectionId == data.sectionId
+        && get(
+          /databases/$(database)/documents/tests/$(data.examId)
+        ).data.subjectId == data.subjectId
+        && (
+          isSchoolAdmin()
+          || (
+            userData().role == 'subjectTeacher'
+            && data.enteredBy == request.auth.uid
+            && hasActiveSubjectAssignment(
+              data.sectionId,
+              data.subjectId,
+              data.schoolId
+            )
+          )
+        );
+    }
+
+    match /studentMarks/{markId} {
+      allow read: if isSchoolStaff()
+        && resource.data.schoolId == userData().schoolId
+        && (
+          isSchoolAdmin()
+          || (
+            userData().role == 'subjectTeacher'
+            && hasActiveSubjectAssignment(
+              resource.data.sectionId,
+              resource.data.subjectId,
+              resource.data.schoolId
+            )
+          )
+        );
+
+      allow create: if validStudentMark(request.resource.data);
+
+      allow update: if validStudentMark(request.resource.data)
+        && resource.data.schoolId == userData().schoolId
+        && resource.data.studentId == request.resource.data.studentId
+        && resource.data.examId == request.resource.data.examId;
+
+      allow delete: if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId;
+    }
   }
 }

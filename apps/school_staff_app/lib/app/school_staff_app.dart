@@ -6,6 +6,7 @@ import '../config/app_config.dart';
 import '../features/auth/logic/staff_auth_controller.dart';
 import '../features/auth/ui/staff_login_screen.dart';
 import '../features/dashboard/ui/school_admin_dashboard_screen.dart';
+import '../features/dashboard/ui/staff_teacher_dashboard_screen.dart';
 
 class SchoolStaffApp extends StatelessWidget {
   const SchoolStaffApp({
@@ -63,7 +64,9 @@ class StaffAppEntryScreen extends ConsumerWidget {
 
     if (auth.isLoading && !auth.isLoggedIn) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
       );
     }
 
@@ -77,8 +80,12 @@ class StaffAppEntryScreen extends ConsumerWidget {
 
       case 'classTeacher':
       case 'subjectTeacher':
+        return const StaffTeacherDashboardScreen();
+
       case 'monitor':
-        return StaffRolePlaceholderScreen(role: auth.role);
+        return const StaffRolePlaceholderScreen(
+          role: 'monitor',
+        );
 
       default:
         return const Scaffold(
@@ -108,12 +115,15 @@ class StaffRolePlaceholderScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Staff Workspace')),
+      appBar: AppBar(
+        title: const Text('Staff Workspace'),
+      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            'Role: $role\nIs role ka dashboard abhi tayyar kiya ja raha hai.',
+            'Role: $role\n'
+            'Is role ka dashboard abhi tayyar kiya ja raha hai.',
             textAlign: TextAlign.center,
           ),
         ),
