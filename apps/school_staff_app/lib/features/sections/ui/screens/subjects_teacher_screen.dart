@@ -50,7 +50,10 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
 
     try {
       final results = await Future.wait<dynamic>([
-        widget.repository.getSubjects(widget.section.schoolId),
+        widget.repository.getSubjects(
+          widget.section.schoolId,
+          sectionId: widget.section.id,
+        ),
         widget.repository.getTeachers(widget.section.schoolId),
         widget.repository.getAssignments(
           schoolId: widget.section.schoolId,
@@ -100,29 +103,39 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Add Subject'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                autofocus: true,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Subject name *',
-                  hintText: 'e.g. Mathematics',
+          title: const Text('Add Section Subject'),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Subject name *',
+                    hintText: 'e.g. Mathematics',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: codeController,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(
-                  labelText: 'Subject code (optional)',
-                  hintText: 'e.g. MATH',
+                const SizedBox(height: 12),
+                TextField(
+                  controller: codeController,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Subject code (optional)',
+                    hintText: 'e.g. MATH',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                const Text(
+                  'Yeh subject sirf selected section ke liye create hoga.',
+                  style: TextStyle(color: Colors.black54),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -131,29 +144,36 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
             ),
             FilledButton(
               onPressed: () {
-                if (nameController.text.trim().isEmpty) return;
-                Navigator.pop(dialogContext, true);
+                if (nameController.text.trim().isNotEmpty) {
+                  Navigator.pop(dialogContext, true);
+                }
               },
-              child: const Text('Save'),
+              child: const Text('Save Subject'),
             ),
           ],
         ),
       );
 
-      if (confirmed != true) return;
+      if (confirmed != true || !mounted) return;
 
       setState(() => _saving = true);
 
       await widget.repository.addSubject(
         schoolId: widget.section.schoolId,
+        sectionId: widget.section.id,
         name: nameController.text,
         code: codeController.text,
       );
 
       await _load();
-      if (mounted) _message('Subject added successfully.');
+
+      if (mounted) {
+        _message('Subject is section mein successfully add ho gaya.');
+      }
     } catch (e) {
-      if (mounted) _message('Subject save nahi hua: $e');
+      if (mounted) {
+        _message('Subject save nahi hua: $e');
+      }
     } finally {
       nameController.dispose();
       codeController.dispose();
@@ -163,15 +183,15 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
   }
 
   Future<void> _assignTeacher(Subject subject) async {
-    final selectedTeacher = _teacherFor(subject.id);
+    final currentTeacher = _teacherFor(subject.id);
 
     final choice = await showDialog<_AssignChoice>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text('Assign ${subject.name}'),
         content: const Text(
-          'Existing teacher select karein ya isi waqt naya teacher account '
-          'create karein.',
+          'Is section ke subject ke liye existing teacher select karein '
+          'ya naya teacher account create karein.',
         ),
         actions: [
           TextButton(
@@ -183,7 +203,7 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
             onPressed: () =>
                 Navigator.pop(dialogContext, _AssignChoice.createNew),
             icon: const Icon(Icons.person_add_alt_1),
-            label: const Text('Create New Teacher'),
+            label: const Text('Create Teacher'),
           ),
           FilledButton(
             onPressed: _teachers.isEmpty
@@ -204,10 +224,9 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
 
     if (choice == _AssignChoice.createNew) {
       await _createAndAssignTeacher(subject);
-      return;
+    } else {
+      await _selectExistingTeacher(subject, currentTeacher);
     }
-
-    await _selectExistingTeacher(subject, selectedTeacher);
   }
 
   Future<void> _selectExistingTeacher(
@@ -254,10 +273,7 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
             FilledButton(
               onPressed: selectedTeacherId == null
                   ? null
-                  : () => Navigator.pop(
-                        dialogContext,
-                        selectedTeacherId,
-                      ),
+                  : () => Navigator.pop(dialogContext, selectedTeacherId),
               child: const Text('Assign'),
             ),
           ],
@@ -292,7 +308,8 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'New teacher will be assigned to ${subject.name}.',
+                      'Teacher ko ${subject.name} ke liye is section mein '
+                      'assign kiya jayega.',
                       style: const TextStyle(color: Colors.black54),
                     ),
                     const SizedBox(height: 16),
@@ -325,12 +342,9 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                       enableSuggestions: false,
                       decoration: InputDecoration(
                         labelText: 'Temporary password *',
-                        helperText: 'Minimum 8 characters',
+                        helperText: '8–128 characters',
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
-                          tooltip: obscurePassword
-                              ? 'Show password'
-                              : 'Hide password',
                           onPressed: () {
                             setDialogState(() {
                               obscurePassword = !obscurePassword;
@@ -385,7 +399,6 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                   final password = passwordController.text;
 
                   if (name.isEmpty ||
-                      email.isEmpty ||
                       !email.contains('@') ||
                       password.length < 8 ||
                       password.length > 128) {
@@ -414,7 +427,7 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
 
       setState(() => _saving = true);
 
-      // The trusted callable creates the Auth account and users profile.
+      // Uses the trusted callable; does not sign the admin out.
       final teacher = await widget.repository.createTeacherAccount(
         name: details.name,
         email: details.email,
@@ -422,7 +435,6 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
         role: details.role,
       );
 
-      // Refresh the teacher list even if assignment subsequently fails.
       try {
         await widget.repository.assignTeacher(
           schoolId: widget.section.schoolId,
@@ -437,7 +449,7 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
 
         if (mounted) {
           _message(
-            'Teacher account created and ${subject.name} assigned successfully.',
+            'Teacher account created and assigned to ${subject.name}.',
           );
         }
       } catch (e) {
@@ -445,8 +457,7 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
 
         if (mounted) {
           _message(
-            'Teacher account create ho gaya, lekin assignment fail hui. '
-            'Teacher list refresh kar di gayi hai. Error: $e',
+            'Teacher account create ho gaya, lekin assignment fail hui: $e',
           );
         }
       }
@@ -481,7 +492,7 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
 
       await _load();
 
-      if (mounted) _message('Teacher assigned successfully.');
+      if (mounted) _message('Teacher assignment successfully saved.');
     } catch (e) {
       if (mounted) _message('Assignment save nahi hui: $e');
     } finally {
@@ -540,7 +551,10 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 8),
-                          Text(_error!, textAlign: TextAlign.center),
+                          SelectableText(
+                            _error!,
+                            textAlign: TextAlign.center,
+                          ),
                           const SizedBox(height: 12),
                           FilledButton(
                             onPressed: _load,
@@ -555,18 +569,17 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                       RefreshIndicator(
                         onRefresh: _load,
                         child: ListView(
-                          padding: const EdgeInsets.fromLTRB(
-                            16,
-                            16,
-                            16,
-                            100,
-                          ),
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                           children: [
                             Card(
                               elevation: 0,
                               child: ListTile(
                                 leading: const CircleAvatar(
-                                  child: Icon(Icons.class_outlined),
+                                  backgroundColor: Color(0xFFEAF6EF),
+                                  child: Icon(
+                                    Icons.class_outlined,
+                                    color: _green,
+                                  ),
                                 ),
                                 title: Text(
                                   '${widget.className} — Section ${widget.section.name}',
@@ -575,12 +588,21 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                                   ),
                                 ),
                                 subtitle: Text(
-                                  '${_subjects.length} active subjects · '
+                                  '${_subjects.length} section subjects · '
                                   '${_assignments.length} active assignments',
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Subjects for this section',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: _darkGreen,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
                             if (_subjects.isEmpty)
                               const Card(
                                 child: Padding(
@@ -593,15 +615,16 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                                       ),
                                       SizedBox(height: 12),
                                       Text(
-                                        'Abhi koi subject nahi hai.',
+                                        'Abhi is section mein koi subject nahi.',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                         ),
+                                        textAlign: TextAlign.center,
                                       ),
                                       SizedBox(height: 6),
                                       Text(
-                                        'Add Subject par click karke '
-                                        'pehla subject banayein.',
+                                        'Add Subject par click karke is section '
+                                        'ka pehla subject banayein.',
                                         textAlign: TextAlign.center,
                                       ),
                                     ],
@@ -633,9 +656,14 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                                     subtitle: Padding(
                                       padding: const EdgeInsets.only(top: 6),
                                       child: Text(
-                                        teacher == null
-                                            ? 'Teacher not assigned'
-                                            : 'Teacher: ${teacher.name}',
+                                        [
+                                          if (subject.code != null &&
+                                              subject.code!.isNotEmpty)
+                                            'Code: ${subject.code}',
+                                          teacher == null
+                                              ? 'Teacher not assigned'
+                                              : 'Teacher: ${teacher.name}',
+                                        ].join('\n'),
                                       ),
                                     ),
                                     trailing: _saving
@@ -650,9 +678,7 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                                             onPressed: () =>
                                                 _assignTeacher(subject),
                                             child: Text(
-                                              teacher == null
-                                                  ? 'Assign'
-                                                  : 'Change',
+                                              teacher == null ? 'Assign' : 'Change',
                                             ),
                                           ),
                                   ),
@@ -662,9 +688,9 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                               const Padding(
                                 padding: EdgeInsets.all(12),
                                 child: Text(
-                                  'Abhi koi active teacher nahi mila. '
-                                  'Subject ke saamne Assign dabakar '
-                                  'Create New Teacher select karein.',
+                                  'Koi active teacher nahi mila. Subject ke '
+                                  'saamne Assign dabakar naya teacher account '
+                                  'create karein.',
                                   textAlign: TextAlign.center,
                                 ),
                               ),

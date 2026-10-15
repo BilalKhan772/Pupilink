@@ -172,7 +172,7 @@ export const createStaffAccount = onCall(async (request) => {
       throw error;
     }
 
-    console.error("Staff account creation failed.");
+    console.error("Staff account creation failed:", error);
 
     throw new HttpsError(
       "internal",

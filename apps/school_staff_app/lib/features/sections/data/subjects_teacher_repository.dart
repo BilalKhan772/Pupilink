@@ -1,8 +1,8 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:school_models/school_models.dart';
 import 'package:school_core/school_core.dart';
+import 'package:school_models/school_models.dart';
 
 class SubjectsTeacherRepository {
   SubjectsTeacherRepository({
@@ -23,15 +23,53 @@ class SubjectsTeacherRepository {
   CollectionReference<Map<String, dynamic>> get _assignments =>
       _db.collection(FirestoreCollections.teacherAssignments);
 
-  // Load active subjects belonging to this school.
-  Future<List<Subject>> getSubjects(String schoolId) async {
-    final result = await _subjects
-        .where('schoolId', isEqualTo: schoolId)
-        .get();
+  /// Loads subjects belonging to this section.
+  ///
+  /// Legacy subjects without sectionId remain visible in a section
+  /// if that section already has an assignment for the subject.
+  /// Existing Firestore documents are not deleted or migrated.
+  Future<List<Subject>> getSubjects(
+    String schoolId, {
+    required String sectionId,
+  }) async {
+    if (schoolId.trim().isEmpty || sectionId.trim().isEmpty) {
+      throw ArgumentError('School ID aur section ID required hain.');
+    }
 
-    final subjects = result.docs
+    final results = await Future.wait([
+      _subjects.where('schoolId', isEqualTo: schoolId).get(),
+      getAssignments(schoolId: schoolId, sectionId: sectionId),
+    ]);
+
+    final subjectSnapshot =
+        results[0] as QuerySnapshot<Map<String, dynamic>>;
+    final assignments = results[1] as List<TeacherAssignment>;
+
+    final assignedSubjectIds = assignments
+        .where((assignment) => assignment.isActive)
+        .map((assignment) => assignment.subjectId)
+        .whereType<String>()
+        .toSet();
+
+    final subjects = subjectSnapshot.docs
+        .where((doc) {
+          final data = doc.data();
+
+          if (data['isActive'] == false) return false;
+
+          final subjectSectionId = data['sectionId'];
+
+          // Newly created section-specific subjects.
+          if (subjectSectionId is String &&
+              subjectSectionId.isNotEmpty) {
+            return subjectSectionId == sectionId;
+          }
+
+          // Backward compatibility for existing school-wide subjects:
+          // show them only where an existing assignment is present.
+          return assignedSubjectIds.contains(doc.id);
+        })
         .map((doc) => Subject.fromMap(doc.id, doc.data()))
-        .where((subject) => subject.isActive)
         .toList();
 
     subjects.sort(
@@ -41,7 +79,7 @@ class SubjectsTeacherRepository {
     return subjects;
   }
 
-  // Load active class and subject teachers from users.
+  /// Loads active teachers from this school.
   Future<List<StaffMember>> getTeachers(String schoolId) async {
     final result = await _users
         .where('schoolId', isEqualTo: schoolId)
@@ -73,11 +111,15 @@ class SubjectsTeacherRepository {
     return teachers;
   }
 
-  // Load active assignments for a particular section.
+  /// Loads active assignments for one section.
   Future<List<TeacherAssignment>> getAssignments({
     required String schoolId,
     required String sectionId,
   }) async {
+    if (schoolId.trim().isEmpty || sectionId.trim().isEmpty) {
+      throw ArgumentError('School ID aur section ID required hain.');
+    }
+
     final result = await _assignments
         .where('schoolId', isEqualTo: schoolId)
         .where('sectionId', isEqualTo: sectionId)
@@ -89,34 +131,76 @@ class SubjectsTeacherRepository {
         .toList();
   }
 
-  // Create a subject.
+  /// Creates a subject specifically for this section.
+  ///
+  /// Existing school-wide subjects and their assignments remain untouched.
   Future<void> addSubject({
     required String schoolId,
+    required String sectionId,
     required String name,
     String? code,
   }) async {
+    final cleanSchoolId = schoolId.trim();
+    final cleanSectionId = sectionId.trim();
     final cleanName = name.trim();
+    final cleanCode = code?.trim();
 
-    if (schoolId.trim().isEmpty || cleanName.isEmpty) {
+    if (cleanSchoolId.isEmpty ||
+        cleanSectionId.isEmpty ||
+        cleanName.isEmpty) {
       throw ArgumentError(
-        'School aur subject name required hain.',
+        'School, section aur subject name required hain.',
+      );
+    }
+
+    // Verify the section belongs to this school before creating a subject.
+    final sectionDoc =
+        await _db.collection(FirestoreCollections.sections).doc(
+              cleanSectionId,
+            ).get();
+
+    final sectionData = sectionDoc.data();
+
+    if (!sectionDoc.exists ||
+        sectionData == null ||
+        sectionData['schoolId'] != cleanSchoolId ||
+        sectionData['isActive'] == false) {
+      throw StateError('Selected section valid ya active nahi hai.');
+    }
+
+    // Avoid duplicate active subject names within the same section.
+    final existingSubjects = await _subjects
+        .where('schoolId', isEqualTo: cleanSchoolId)
+        .where('sectionId', isEqualTo: cleanSectionId)
+        .get();
+
+    final duplicate = existingSubjects.docs.any((doc) {
+      final data = doc.data();
+
+      return data['isActive'] != false &&
+          (data['name'] as String? ?? '').trim().toLowerCase() ==
+              cleanName.toLowerCase();
+    });
+
+    if (duplicate) {
+      throw StateError(
+        'Is section mein yeh subject pehle se mojood hai.',
       );
     }
 
     await _subjects.add({
-      'schoolId': schoolId,
+      'schoolId': cleanSchoolId,
+      'sectionId': cleanSectionId,
       'name': cleanName,
-      'code': code?.trim().isEmpty == true
-          ? null
-          : code?.trim(),
+      'code': cleanCode == null || cleanCode.isEmpty ? null : cleanCode,
       'isActive': true,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
-  // Create a staff login account through the trusted Firebase Function.
-  // The function creates both Firebase Authentication and users profile.
+  /// Creates the teacher's Auth account and profile through a trusted
+  /// Firebase callable function. The current admin session is retained.
   Future<StaffMember> createTeacherAccount({
     required String name,
     required String email,
@@ -145,8 +229,7 @@ class SubjectsTeacherRepository {
     }
 
     try {
-      final callable =
-          _functions.httpsCallable('createStaffAccount');
+      final callable = _functions.httpsCallable('createStaffAccount');
 
       final result = await callable.call<Map<String, dynamic>>({
         'name': cleanName,
@@ -158,9 +241,7 @@ class SubjectsTeacherRepository {
       final data = result.data;
       final uid = data['uid'] as String?;
 
-      if (data['success'] != true ||
-          uid == null ||
-          uid.isEmpty) {
+      if (data['success'] != true || uid == null || uid.isEmpty) {
         throw StateError(
           'Function ne successful account response return nahi kiya.',
         );
@@ -182,7 +263,10 @@ class SubjectsTeacherRepository {
     }
   }
 
-  // Assign or change a teacher for a subject in a section.
+  /// Assigns or changes a teacher for one subject in one section.
+  ///
+  /// Assignment IDs remain section-specific. Existing assignment documents
+  /// are updated in place instead of creating duplicate assignments.
   Future<void> assignTeacher({
     required String schoolId,
     required String teacherId,
@@ -191,11 +275,11 @@ class SubjectsTeacherRepository {
     required String subjectId,
     String? academicYearId,
   }) async {
-    if (schoolId.isEmpty ||
-        teacherId.isEmpty ||
-        classId.isEmpty ||
-        sectionId.isEmpty ||
-        subjectId.isEmpty) {
+    if (schoolId.trim().isEmpty ||
+        teacherId.trim().isEmpty ||
+        classId.trim().isEmpty ||
+        sectionId.trim().isEmpty ||
+        subjectId.trim().isEmpty) {
       throw ArgumentError(
         'Assignment ki tamam required values select karein.',
       );
@@ -207,12 +291,21 @@ class SubjectsTeacherRepository {
     if (!teacherDoc.exists ||
         teacherData == null ||
         teacherData['schoolId'] != schoolId ||
-        !['classTeacher', 'subjectTeacher']
-            .contains(teacherData['role']) ||
+        !['classTeacher', 'subjectTeacher'].contains(teacherData['role']) ||
         teacherData['isActive'] == false) {
-      throw StateError(
-        'Selected teacher valid ya active nahi hai.',
-      );
+      throw StateError('Selected teacher valid ya active nahi hai.');
+    }
+
+    final sectionDoc =
+        await _db.collection(FirestoreCollections.sections).doc(sectionId).get();
+    final sectionData = sectionDoc.data();
+
+    if (!sectionDoc.exists ||
+        sectionData == null ||
+        sectionData['schoolId'] != schoolId ||
+        sectionData['classId'] != classId ||
+        sectionData['isActive'] == false) {
+      throw StateError('Selected section is class/school ka valid section nahi hai.');
     }
 
     final subjectDoc = await _subjects.doc(subjectId).get();
@@ -222,16 +315,21 @@ class SubjectsTeacherRepository {
         subjectData == null ||
         subjectData['schoolId'] != schoolId ||
         subjectData['isActive'] == false) {
-      throw StateError(
-        'Selected subject is school ka valid subject nahi hai.',
-      );
+      throw StateError('Selected subject is school ka valid subject nahi hai.');
     }
 
-    // One assignment document per section and subject.
+    // A subject explicitly assigned to another section cannot be used here.
+    // Legacy subjects without sectionId remain assignable for compatibility.
+    final subjectSectionId = subjectData['sectionId'];
+    if (subjectSectionId is String &&
+        subjectSectionId.isNotEmpty &&
+        subjectSectionId != sectionId) {
+      throw StateError('Yeh subject kisi doosre section ka hai.');
+    }
+
     final assignmentId = '${sectionId}_$subjectId';
     final reference = _assignments.doc(assignmentId);
     final existing = await reference.get();
-
     final now = FieldValue.serverTimestamp();
 
     await reference.set({
@@ -246,10 +344,10 @@ class SubjectsTeacherRepository {
       if (!existing.exists) 'assignedAt': now,
       'updatedAt': now,
       if (!existing.exists) 'createdAt': now,
-    });
+    }, SetOptions(merge: true));
   }
 
-  // Soft-delete an assignment so its history is retained.
+  /// Soft-deletes an assignment, preserving its document/history.
   Future<void> removeAssignment(String assignmentId) async {
     await _assignments.doc(assignmentId).update({
       'isActive': false,
