@@ -190,8 +190,9 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
       builder: (dialogContext) => AlertDialog(
         title: Text('Assign ${subject.name}'),
         content: const Text(
-          'Is section ke subject ke liye existing teacher select karein '
-          'ya naya teacher account create karein.',
+          'Existing teacher select karein ya naya teacher account '
+          'create karein. Subject Teacher ko subject assign hoga; '
+          'Class Teacher ko is section ka class teacher set kiya jayega.',
         ),
         actions: [
           TextButton(
@@ -283,7 +284,38 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
 
     if (teacherId == null || !mounted) return;
 
-    await _saveAssignment(subject, teacherId);
+    await _assignSelectedTeacher(subject, teacherId);
+  }
+
+  /// Uses the selected teacher's role to choose the correct assignment path.
+  ///
+  /// Class teachers are saved on the section document.
+  /// Subject teachers receive a normal subject assignment.
+  Future<void> _assignSelectedTeacher(
+    Subject subject,
+    String teacherId,
+  ) async {
+    StaffMember? selectedTeacher;
+
+    for (final teacher in _teachers) {
+      if (teacher.id == teacherId) {
+        selectedTeacher = teacher;
+        break;
+      }
+    }
+
+    if (selectedTeacher == null) {
+      _message('Selected teacher nahi mila. Refresh karke dobara try karein.');
+      return;
+    }
+
+    if (selectedTeacher.role == 'classTeacher') {
+      await _saveClassTeacher(teacherId);
+    } else if (selectedTeacher.role == 'subjectTeacher') {
+      await _saveAssignment(subject, teacherId);
+    } else {
+      _message('Selected teacher ka role valid nahi hai.');
+    }
   }
 
   Future<void> _createAndAssignTeacher(Subject subject) async {
@@ -308,8 +340,12 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Teacher ko ${subject.name} ke liye is section mein '
-                      'assign kiya jayega.',
+                      role == 'classTeacher'
+                          ? 'Naya teacher ${widget.className}, '
+                              'Section ${widget.section.name} ka '
+                              'class teacher banega.'
+                          : 'Teacher ko ${subject.name} ke liye '
+                              'is section mein assign kiya jayega.',
                       style: const TextStyle(color: Colors.black54),
                     ),
                     const SizedBox(height: 16),
@@ -427,7 +463,8 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
 
       setState(() => _saving = true);
 
-      // Uses the trusted callable; does not sign the admin out.
+      // Creates the account through the trusted callable function.
+      // This should retain the admin's current session.
       final teacher = await widget.repository.createTeacherAccount(
         name: details.name,
         email: details.email,
@@ -436,21 +473,41 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
       );
 
       try {
-        await widget.repository.assignTeacher(
-          schoolId: widget.section.schoolId,
-          teacherId: teacher.id,
-          classId: widget.section.classId,
-          sectionId: widget.section.id,
-          subjectId: subject.id,
-          academicYearId: widget.section.academicYearId,
-        );
-
-        await _load();
-
-        if (mounted) {
-          _message(
-            'Teacher account created and assigned to ${subject.name}.',
+        if (details.role == 'classTeacher') {
+          // Save the teacher UID on the selected section.
+          await widget.repository.assignClassTeacher(
+            schoolId: widget.section.schoolId,
+            teacherId: teacher.id,
+            classId: widget.section.classId,
+            sectionId: widget.section.id,
           );
+
+          await _load();
+
+          if (mounted) {
+            _message(
+              'Class Teacher account created and assigned to '
+              '${widget.className}, Section ${widget.section.name}.',
+            );
+          }
+        } else {
+          // Preserve the existing subject-teacher assignment behavior.
+          await widget.repository.assignTeacher(
+            schoolId: widget.section.schoolId,
+            teacherId: teacher.id,
+            classId: widget.section.classId,
+            sectionId: widget.section.id,
+            subjectId: subject.id,
+            academicYearId: widget.section.academicYearId,
+          );
+
+          await _load();
+
+          if (mounted) {
+            _message(
+              'Teacher account created and assigned to ${subject.name}.',
+            );
+          }
         }
       } catch (e) {
         await _load();
@@ -474,6 +531,34 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
     }
   }
 
+  Future<void> _saveClassTeacher(String teacherId) async {
+    setState(() => _saving = true);
+
+    try {
+      await widget.repository.assignClassTeacher(
+        schoolId: widget.section.schoolId,
+        teacherId: teacherId,
+        classId: widget.section.classId,
+        sectionId: widget.section.id,
+      );
+
+      await _load();
+
+      if (mounted) {
+        _message(
+          'Class Teacher successfully assigned to '
+          '${widget.className}, Section ${widget.section.name}.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _message('Class Teacher assign nahi hua: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _saveAssignment(
     Subject subject,
     String teacherId,
@@ -492,9 +577,13 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
 
       await _load();
 
-      if (mounted) _message('Teacher assignment successfully saved.');
+      if (mounted) {
+        _message('Teacher assignment successfully saved.');
+      }
     } catch (e) {
-      if (mounted) _message('Assignment save nahi hui: $e');
+      if (mounted) {
+        _message('Assignment save nahi hui: $e');
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

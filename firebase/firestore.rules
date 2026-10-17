@@ -139,7 +139,7 @@ service cloud.firestore {
         && request.resource.data.role == 'parent';
 
       // Users can read their own profile.
-      // School staff can read profiles belonging to their school.
+      // School staff can read profiles from their own school.
       allow read:
         if isSignedIn()
         && (
@@ -150,7 +150,7 @@ service cloud.firestore {
           )
         );
 
-      // Users cannot change their own role or school.
+      // Users cannot change their role or school themselves.
       allow update:
         if isSignedIn()
         && request.auth.uid == userId
@@ -167,7 +167,7 @@ service cloud.firestore {
     match /students/{studentId} {
 
       // Parents can read approved linked students.
-      // Staff can read students from their own school.
+      // School staff can read students in their school.
       allow read:
         if (
           isParent()
@@ -228,6 +228,56 @@ service cloud.firestore {
     }
 
     // ============================
+    // CLASSES
+    // ============================
+
+    match /classes/{classId} {
+
+      // School staff can read classes from their own school.
+      allow read:
+        if isSchoolStaff()
+        && resource.data.schoolId == userData().schoolId;
+
+      allow create:
+        if isSchoolAdmin()
+        && request.resource.data.schoolId == userData().schoolId;
+
+      allow update:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId
+        && request.resource.data.schoolId == userData().schoolId;
+
+      allow delete:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId;
+    }
+
+    // ============================
+    // SECTIONS
+    // ============================
+
+    match /sections/{sectionId} {
+
+      // Needed for teacher dashboards, section details and class lookups.
+      allow read:
+        if isSchoolStaff()
+        && resource.data.schoolId == userData().schoolId;
+
+      allow create:
+        if isSchoolAdmin()
+        && request.resource.data.schoolId == userData().schoolId;
+
+      allow update:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId
+        && request.resource.data.schoolId == userData().schoolId;
+
+      allow delete:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId;
+    }
+
+    // ============================
     // SUBJECTS
     // ============================
 
@@ -264,7 +314,7 @@ service cloud.firestore {
         if isSchoolStaff()
         && resource.data.schoolId == userData().schoolId;
 
-      // Staff accounts must be managed by trusted backend functions.
+      // Staff accounts are managed by trusted backend functions.
       allow create, update, delete: if false;
     }
 
@@ -282,8 +332,6 @@ service cloud.firestore {
         if isSchoolAdmin()
         && validAssignment(request.resource.data);
 
-      // Allows same-school admins to change/reassign an assignment
-      // while keeping all linked records valid.
       allow update:
         if isSchoolAdmin()
         && resource.data.schoolId == userData().schoolId
@@ -294,12 +342,17 @@ service cloud.firestore {
         && resource.data.schoolId == userData().schoolId;
     }
 
-        // ============================
-    // SCHOOL TESTS
+    // ============================
+    // ACTIVE SUBJECT ASSIGNMENT
     // ============================
 
+    // Supports both classTeacher and subjectTeacher.
+    // Assignment document IDs must follow:
+    // sectionId_subjectId
     function hasActiveSubjectAssignment(sectionId, subjectId, schoolId) {
-      return exists(
+      return isSchoolStaff()
+        && userData().role in ['classTeacher', 'subjectTeacher']
+        && exists(
           /databases/$(database)/documents/teacherAssignments/$(sectionId + '_' + subjectId)
         )
         && get(
@@ -319,6 +372,10 @@ service cloud.firestore {
         ).data.isActive == true;
     }
 
+    // ============================
+    // SCHOOL TESTS
+    // ============================
+
     function validTestData(data) {
       return isSchoolStaff()
         && data.schoolId == userData().schoolId
@@ -334,7 +391,7 @@ service cloud.firestore {
         && (
           isSchoolAdmin()
           || (
-            userData().role == 'subjectTeacher'
+            userData().role in ['classTeacher', 'subjectTeacher']
             && hasActiveSubjectAssignment(
               data.sectionId,
               data.subjectId,
@@ -345,12 +402,14 @@ service cloud.firestore {
     }
 
     match /tests/{testId} {
-      allow read: if isSchoolStaff()
+
+      allow read:
+        if isSchoolStaff()
         && resource.data.schoolId == userData().schoolId
         && (
           isSchoolAdmin()
           || (
-            userData().role == 'subjectTeacher'
+            userData().role in ['classTeacher', 'subjectTeacher']
             && hasActiveSubjectAssignment(
               resource.data.sectionId,
               resource.data.subjectId,
@@ -359,24 +418,27 @@ service cloud.firestore {
           )
         );
 
-      allow create: if validTestData(request.resource.data)
+      allow create:
+        if validTestData(request.resource.data)
         && request.resource.data.createdBy == request.auth.uid;
 
-      allow update: if validTestData(request.resource.data)
+      allow update:
+        if validTestData(request.resource.data)
         && resource.data.schoolId == userData().schoolId
         && (
           isSchoolAdmin()
           || (
-            userData().role == 'subjectTeacher'
+            userData().role in ['classTeacher', 'subjectTeacher']
             && hasActiveSubjectAssignment(
-              resource.data.sectionId,
-              resource.data.subjectId,
-              resource.data.schoolId
+              request.resource.data.sectionId,
+              request.resource.data.subjectId,
+              request.resource.data.schoolId
             )
           )
         );
 
-      allow delete: if isSchoolAdmin()
+      allow delete:
+        if isSchoolAdmin()
         && resource.data.schoolId == userData().schoolId;
     }
 
@@ -411,7 +473,7 @@ service cloud.firestore {
         && (
           isSchoolAdmin()
           || (
-            userData().role == 'subjectTeacher'
+            userData().role in ['classTeacher', 'subjectTeacher']
             && data.enteredBy == request.auth.uid
             && hasActiveSubjectAssignment(
               data.sectionId,
@@ -423,12 +485,14 @@ service cloud.firestore {
     }
 
     match /studentMarks/{markId} {
-      allow read: if isSchoolStaff()
+
+      allow read:
+        if isSchoolStaff()
         && resource.data.schoolId == userData().schoolId
         && (
           isSchoolAdmin()
           || (
-            userData().role == 'subjectTeacher'
+            userData().role in ['classTeacher', 'subjectTeacher']
             && hasActiveSubjectAssignment(
               resource.data.sectionId,
               resource.data.subjectId,
@@ -437,14 +501,17 @@ service cloud.firestore {
           )
         );
 
-      allow create: if validStudentMark(request.resource.data);
+      allow create:
+        if validStudentMark(request.resource.data);
 
-      allow update: if validStudentMark(request.resource.data)
+      allow update:
+        if validStudentMark(request.resource.data)
         && resource.data.schoolId == userData().schoolId
         && resource.data.studentId == request.resource.data.studentId
         && resource.data.examId == request.resource.data.examId;
 
-      allow delete: if isSchoolAdmin()
+      allow delete:
+        if isSchoolAdmin()
         && resource.data.schoolId == userData().schoolId;
     }
   }

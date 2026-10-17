@@ -154,10 +154,10 @@ class SubjectsTeacherRepository {
     }
 
     // Verify the section belongs to this school before creating a subject.
-    final sectionDoc =
-        await _db.collection(FirestoreCollections.sections).doc(
-              cleanSectionId,
-            ).get();
+    final sectionDoc = await _db
+        .collection(FirestoreCollections.sections)
+        .doc(cleanSectionId)
+        .get();
 
     final sectionData = sectionDoc.data();
 
@@ -296,8 +296,11 @@ class SubjectsTeacherRepository {
       throw StateError('Selected teacher valid ya active nahi hai.');
     }
 
-    final sectionDoc =
-        await _db.collection(FirestoreCollections.sections).doc(sectionId).get();
+    final sectionDoc = await _db
+        .collection(FirestoreCollections.sections)
+        .doc(sectionId)
+        .get();
+
     final sectionData = sectionDoc.data();
 
     if (!sectionDoc.exists ||
@@ -305,7 +308,9 @@ class SubjectsTeacherRepository {
         sectionData['schoolId'] != schoolId ||
         sectionData['classId'] != classId ||
         sectionData['isActive'] == false) {
-      throw StateError('Selected section is class/school ka valid section nahi hai.');
+      throw StateError(
+        'Selected section is class/school ka valid section nahi hai.',
+      );
     }
 
     final subjectDoc = await _subjects.doc(subjectId).get();
@@ -315,12 +320,15 @@ class SubjectsTeacherRepository {
         subjectData == null ||
         subjectData['schoolId'] != schoolId ||
         subjectData['isActive'] == false) {
-      throw StateError('Selected subject is school ka valid subject nahi hai.');
+      throw StateError(
+        'Selected subject is school ka valid subject nahi hai.',
+      );
     }
 
     // A subject explicitly assigned to another section cannot be used here.
     // Legacy subjects without sectionId remain assignable for compatibility.
     final subjectSectionId = subjectData['sectionId'];
+
     if (subjectSectionId is String &&
         subjectSectionId.isNotEmpty &&
         subjectSectionId != sectionId) {
@@ -345,6 +353,69 @@ class SubjectsTeacherRepository {
       'updatedAt': now,
       if (!existing.exists) 'createdAt': now,
     }, SetOptions(merge: true));
+  }
+
+  /// Assigns a class teacher to a section.
+  ///
+  /// This updates only the section's classTeacherId. It does not remove
+  /// or overwrite any subject assignments for the same teacher.
+  Future<void> assignClassTeacher({
+    required String schoolId,
+    required String teacherId,
+    required String classId,
+    required String sectionId,
+  }) async {
+    final cleanSchoolId = schoolId.trim();
+    final cleanTeacherId = teacherId.trim();
+    final cleanClassId = classId.trim();
+    final cleanSectionId = sectionId.trim();
+
+    if (cleanSchoolId.isEmpty ||
+        cleanTeacherId.isEmpty ||
+        cleanClassId.isEmpty ||
+        cleanSectionId.isEmpty) {
+      throw ArgumentError(
+        'School, teacher, class aur section select karein.',
+      );
+    }
+
+    // Verify teacher profile and role.
+    final teacherDoc = await _users.doc(cleanTeacherId).get();
+    final teacherData = teacherDoc.data();
+
+    if (!teacherDoc.exists ||
+        teacherData == null ||
+        teacherData['schoolId'] != cleanSchoolId ||
+        teacherData['role'] != 'classTeacher' ||
+        teacherData['isActive'] == false) {
+      throw StateError(
+        'Selected class teacher valid ya active nahi hai.',
+      );
+    }
+
+    // Verify section belongs to this school and class.
+    final sectionRef = _db
+        .collection(FirestoreCollections.sections)
+        .doc(cleanSectionId);
+
+    final sectionDoc = await sectionRef.get();
+    final sectionData = sectionDoc.data();
+
+    if (!sectionDoc.exists ||
+        sectionData == null ||
+        sectionData['schoolId'] != cleanSchoolId ||
+        sectionData['classId'] != cleanClassId ||
+        sectionData['isActive'] == false) {
+      throw StateError(
+        'Selected section is class/school ka valid section nahi hai.',
+      );
+    }
+
+    // Save the teacher UID to the section document.
+    await sectionRef.update({
+      'classTeacherId': cleanTeacherId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Soft-deletes an assignment, preserving its document/history.

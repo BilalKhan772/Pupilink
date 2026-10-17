@@ -7,6 +7,7 @@ import 'package:school_models/school_models.dart';
 
 import '../../auth/logic/staff_auth_controller.dart';
 import '../../students/ui/screens/all_students_screen.dart';
+import '../../attendance/ui/screens/attendance_screen.dart';
 import '../data/staff_dashboard_repository.dart';
 import '../data/subject_teacher_work_repository.dart';
 import 'subject_teacher_marks_screen.dart';
@@ -245,13 +246,7 @@ class _SubjectTeacherWorkspaceState
       return;
     }
 
-    String subjectName;
-
-    try {
-      subjectName = await _loadSubjectName(assignment);
-    } catch (_) {
-      subjectName = 'Subject';
-    }
+    final subjectName = await _loadSubjectName(assignment);
 
     if (!mounted) return;
 
@@ -351,106 +346,22 @@ class _SubjectTeacherWorkspaceState
 
                 return Column(
                   children: assignments.map((assignment) {
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: FutureBuilder<List<String>>(
-                          future: _loadAssignmentNames(assignment),
-                          builder: (context, namesSnapshot) {
-                            final names = namesSnapshot.data;
-
-                            final className = names != null
-                                ? names[0]
-                                : assignment.classId;
-
-                            final sectionName = names != null
-                                ? names[1]
-                                : assignment.sectionId ?? 'Not set';
-
-                            return Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.menu_book,
-                                      color: Color(0xFF2563EB),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: FutureBuilder<String>(
-                                        future: _loadSubjectName(
-                                          assignment,
-                                        ),
-                                        builder: (context, subjectSnapshot) {
-                                          final subjectName =
-                                              subjectSnapshot.data ??
-                                                  (subjectSnapshot
-                                                              .connectionState ==
-                                                          ConnectionState
-                                                              .waiting
-                                                      ? 'Loading subject...'
-                                                      : 'Subject unavailable');
-
-                                          return Text(
-                                            'Subject: $subjectName',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-                                Text('Class: $className'),
-                                Text('Section: $sectionName'),
-                                const SizedBox(height: 14),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    OutlinedButton.icon(
-                                      onPressed: () =>
-                                          _openTestScreen(assignment),
-                                      icon: const Icon(
-                                        Icons.quiz_outlined,
-                                      ),
-                                      label: const Text('Tests'),
-                                    ),
-                                    OutlinedButton.icon(
-                                      onPressed: () => _openTestScreen(
-                                        assignment,
-                                        openMarks: true,
-                                      ),
-                                      icon: const Icon(Icons.edit_note),
-                                      label: const Text('Enter Marks'),
-                                    ),
-                                    OutlinedButton.icon(
-                                      onPressed:
-                                          namesSnapshot.connectionState ==
-                                                  ConnectionState.waiting
-                                              ? null
-                                              : () => _openAssignmentStudents(
-                                                    assignment,
-                                                    sectionName,
-                                                    className,
-                                                  ),
-                                      icon: const Icon(
-                                        Icons.people_outline,
-                                      ),
-                                      label: const Text('Students'),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            );
-                          },
-                        ),
+                    return _SubjectAssignmentCard(
+                      assignment: assignment,
+                      schoolId: widget.schoolId,
+                      teacherId: widget.teacherId,
+                      loadAssignmentNames: _loadAssignmentNames,
+                      loadSubjectName: _loadSubjectName,
+                      onTests: () => _openTestScreen(assignment),
+                      onMarks: () => _openTestScreen(
+                        assignment,
+                        openMarks: true,
+                      ),
+                      onStudents: (sectionName, className) =>
+                          _openAssignmentStudents(
+                        assignment,
+                        sectionName,
+                        className,
                       ),
                     );
                   }).toList(),
@@ -488,11 +399,17 @@ class ClassTeacherWorkspace extends ConsumerStatefulWidget {
 class _ClassTeacherWorkspaceState
     extends ConsumerState<ClassTeacherWorkspace> {
   late Future<List<SchoolSection>> _sectionsFuture;
+  late Future<List<TeacherAssignment>> _assignmentsFuture;
 
   @override
   void initState() {
     super.initState();
+    _loadData();
+  }
+
+  void _loadData() {
     _loadSections();
+    _loadAssignments();
   }
 
   void _loadSections() {
@@ -514,13 +431,25 @@ class _ClassTeacherWorkspaceState
         );
   }
 
+  void _loadAssignments() {
+    _assignmentsFuture = ref
+        .read(staffDashboardRepositoryProvider)
+        .getTeacherAssignments(
+          schoolId: widget.schoolId,
+          teacherId: widget.teacherId,
+        );
+  }
+
   Future<void> _refresh() async {
-    setState(_loadSections);
+    setState(_loadData);
 
     try {
-      await _sectionsFuture;
+      await Future.wait([
+        _sectionsFuture,
+        _assignmentsFuture,
+      ]);
     } catch (_) {
-      // FutureBuilder error display karega.
+      // FutureBuilder widgets display errors.
     }
   }
 
@@ -548,14 +477,244 @@ class _ClassTeacherWorkspaceState
     );
   }
 
-  void _showComingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '$feature ka module abhi connect nahi hua hai.',
+  Future<void> _openAttendance(
+    SchoolSection section,
+  ) async {
+    if (section.id.trim().isEmpty ||
+        section.classId.trim().isEmpty ||
+        widget.schoolId.trim().isEmpty ||
+        widget.teacherId.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Attendance open nahi ho sakti. School, class, section '
+            'ya teacher ki information missing hai.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AttendanceScreen(
+          schoolId: widget.schoolId,
+          classId: section.classId,
+          sectionId: section.id,
+          staffId: widget.teacherId,
         ),
       ),
     );
+
+    if (mounted) {
+      await _refresh();
+    }
+  }
+
+  Future<List<String>> _loadAssignmentNames(
+    TeacherAssignment assignment,
+  ) async {
+    final db = FirebaseFirestore.instance;
+
+    final className = await _getClassName(
+      db: db,
+      classId: assignment.classId,
+    );
+
+    final section = await _getSection(
+      db: db,
+      sectionId: assignment.sectionId ?? '',
+      schoolId: widget.schoolId,
+    );
+
+    return [
+      className,
+      section?.name ?? assignment.sectionId ?? 'Not set',
+    ];
+  }
+
+  Future<String> _loadSubjectName(
+    TeacherAssignment assignment,
+  ) async {
+    final subjectId = assignment.subjectId ?? '';
+
+    if (subjectId.trim().isEmpty) {
+      return 'Subject not assigned';
+    }
+
+    try {
+      return await ref
+          .read(subjectTeacherWorkRepositoryProvider)
+          .getSubjectName(
+            schoolId: widget.schoolId,
+            subjectId: subjectId,
+          );
+    } catch (_) {
+      return 'Subject unavailable';
+    }
+  }
+
+  /// Opens tests and marks for one of the teacher's own assignments.
+  Future<void> _openSubjectAssignment(
+    TeacherAssignment assignment, {
+    bool openMarks = false,
+  }) async {
+    final sectionId = assignment.sectionId ?? '';
+    final subjectId = assignment.subjectId ?? '';
+
+    if (sectionId.trim().isEmpty || subjectId.trim().isEmpty) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Tests aur marks ke liye subject aur section assignment required hai.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final subjectName = await _loadSubjectName(assignment);
+
+    if (!mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SubjectTeacherMarksScreen(
+          schoolId: widget.schoolId,
+          teacherId: widget.teacherId,
+          assignment: assignment,
+          subjectName: subjectName,
+          openMarks: openMarks,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      await _refresh();
+    }
+  }
+
+  Future<void> _openAssignmentStudents(
+    TeacherAssignment assignment,
+    String sectionName,
+    String className,
+  ) async {
+    await _openStudents(
+      context: context,
+      sectionId: assignment.sectionId ?? '',
+      sectionName: sectionName,
+      className: className,
+    );
+  }
+
+  // Class Teacher ke apne section ke liye Tests & Marks.
+  // Sirf isi teacher ki active subject assignments use hongi.
+  Future<void> _openClassTeacherTestsMarks(
+    SchoolSection section,
+  ) async {
+    if (widget.schoolId.trim().isEmpty ||
+        widget.teacherId.trim().isEmpty ||
+        section.id.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'School, teacher ya section ki information missing hai.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final assignments = await ref
+          .read(staffDashboardRepositoryProvider)
+          .getSectionAssignments(
+            schoolId: widget.schoolId,
+            sectionId: section.id,
+          );
+
+      final myAssignments = assignments.where((assignment) {
+        return assignment.teacherId == widget.teacherId &&
+            assignment.isActive &&
+            (assignment.subjectId ?? '').trim().isNotEmpty &&
+            (assignment.sectionId ?? '').trim() == section.id;
+      }).toList();
+
+      if (!mounted) return;
+
+      if (myAssignments.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Aapke liye is section mein koi active subject assignment '
+              'nahi mili. School Admin se apni subject assignment '
+              'check karwaein.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      TeacherAssignment? selectedAssignment;
+
+      if (myAssignments.length == 1) {
+        selectedAssignment = myAssignments.first;
+      } else {
+        selectedAssignment =
+            await showModalBottomSheet<TeacherAssignment>(
+          context: context,
+          builder: (sheetContext) {
+            return SafeArea(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.all(16),
+                children: [
+                  const Text(
+                    'Select Your Subject',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ...myAssignments.map((assignment) {
+                    return ListTile(
+                      leading: const Icon(
+                        Icons.menu_book_outlined,
+                      ),
+                      title: Text(
+                        assignment.subjectId ?? 'Unknown subject',
+                      ),
+                      subtitle: Text(
+                        'Class: ${assignment.classId}',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        Navigator.pop(sheetContext, assignment);
+                      },
+                    );
+                  }),
+                ],
+              ),
+            );
+          },
+        );
+      }
+
+      if (!mounted || selectedAssignment == null) return;
+
+      await _openSubjectAssignment(selectedAssignment);
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Tests & Marks open nahi ho sake: $error'),
+        ),
+      );
+    }
   }
 
   @override
@@ -579,9 +738,13 @@ class _ClassTeacherWorkspaceState
             _WelcomeCard(
               name: widget.teacherName,
               subtitle:
-                  'Apni assigned class aur attendance manage karein.',
+                  'Apni class, attendance aur subject assignments manage karein.',
             ),
             const SizedBox(height: 20),
+
+            // --------------------------------------------------
+            // CLASS TEACHER SECTIONS
+            // --------------------------------------------------
             const Text(
               'My Sections',
               style: TextStyle(
@@ -676,7 +839,7 @@ class _ClassTeacherWorkspaceState
                                     ),
                                     OutlinedButton.icon(
                                       onPressed: () =>
-                                          _showComingSoon('Attendance'),
+                                          _openAttendance(section),
                                       icon: const Icon(
                                         Icons.fact_check_outlined,
                                       ),
@@ -684,7 +847,9 @@ class _ClassTeacherWorkspaceState
                                     ),
                                     OutlinedButton.icon(
                                       onPressed: () =>
-                                          _showComingSoon('Tests and marks'),
+                                          _openClassTeacherTestsMarks(
+                                        section,
+                                      ),
                                       icon: const Icon(Icons.edit_note),
                                       label: const Text('Tests & Marks'),
                                     ),
@@ -700,7 +865,206 @@ class _ClassTeacherWorkspaceState
                 );
               },
             ),
+
+            const SizedBox(height: 20),
+
+            // --------------------------------------------------
+            // SUBJECT ASSIGNMENTS FOR THIS TEACHER
+            // --------------------------------------------------
+            const Text(
+              'My Subject Assignments',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Yahan aapke doosre sections ke active subject assignments '
+              'bhi dikhaye jayenge.',
+              style: TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 10),
+            FutureBuilder<List<TeacherAssignment>>(
+              future: _assignmentsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState ==
+                    ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return _MessageCard(
+                    message:
+                        'Subject assignments load nahi ho sakin.\n'
+                        '${snapshot.error}',
+                    onRetry: _refresh,
+                  );
+                }
+
+                final assignments = (snapshot.data ?? [])
+                    .where(
+                      (assignment) =>
+                          assignment.isActive &&
+                          (assignment.subjectId ?? '').trim().isNotEmpty &&
+                          (assignment.sectionId ?? '').trim().isNotEmpty,
+                    )
+                    .toList();
+
+                if (assignments.isEmpty) {
+                  return const _MessageCard(
+                    message:
+                        'Abhi aapko koi active subject assignment nahi mili. '
+                        'Agar aap kisi doosre section mein subject teacher '
+                        'bhi hain, to School Admin se assignment check karwaein.',
+                  );
+                }
+
+                return Column(
+                  children: assignments.map((assignment) {
+                    return _SubjectAssignmentCard(
+                      assignment: assignment,
+                      schoolId: widget.schoolId,
+                      teacherId: widget.teacherId,
+                      loadAssignmentNames: _loadAssignmentNames,
+                      loadSubjectName: _loadSubjectName,
+                      onTests: () => _openSubjectAssignment(assignment),
+                      onMarks: () => _openSubjectAssignment(
+                        assignment,
+                        openMarks: true,
+                      ),
+                      onStudents: (sectionName, className) =>
+                          _openAssignmentStudents(
+                        assignment,
+                        sectionName,
+                        className,
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// SHARED SUBJECT ASSIGNMENT CARD
+// ============================================================
+
+class _SubjectAssignmentCard extends StatelessWidget {
+  const _SubjectAssignmentCard({
+    required this.assignment,
+    required this.schoolId,
+    required this.teacherId,
+    required this.loadAssignmentNames,
+    required this.loadSubjectName,
+    required this.onTests,
+    required this.onMarks,
+    required this.onStudents,
+  });
+
+  final TeacherAssignment assignment;
+  final String schoolId;
+  final String teacherId;
+
+  final Future<List<String>> Function(TeacherAssignment)
+      loadAssignmentNames;
+  final Future<String> Function(TeacherAssignment) loadSubjectName;
+
+  final VoidCallback onTests;
+  final VoidCallback onMarks;
+  final void Function(String sectionName, String className) onStudents;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: FutureBuilder<List<String>>(
+          future: loadAssignmentNames(assignment),
+          builder: (context, namesSnapshot) {
+            final names = namesSnapshot.data;
+            final className = names != null
+                ? names[0]
+                : assignment.classId;
+            final sectionName = names != null
+                ? names[1]
+                : assignment.sectionId ?? 'Not set';
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.menu_book,
+                      color: Color(0xFF2563EB),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FutureBuilder<String>(
+                        future: loadSubjectName(assignment),
+                        builder: (context, subjectSnapshot) {
+                          final subjectName = subjectSnapshot.data ??
+                              (subjectSnapshot.connectionState ==
+                                      ConnectionState.waiting
+                                  ? 'Loading subject...'
+                                  : 'Subject unavailable');
+
+                          return Text(
+                            'Subject: $subjectName',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text('Class: $className'),
+                Text('Section: $sectionName'),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: onTests,
+                      icon: const Icon(Icons.quiz_outlined),
+                      label: const Text('Tests'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: onMarks,
+                      icon: const Icon(Icons.edit_note),
+                      label: const Text('Enter Marks'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed:
+                          namesSnapshot.connectionState ==
+                                  ConnectionState.waiting
+                              ? null
+                              : () => onStudents(sectionName, className),
+                      icon: const Icon(Icons.people_outline),
+                      label: const Text('Students'),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

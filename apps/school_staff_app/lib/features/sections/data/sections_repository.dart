@@ -23,6 +23,9 @@ class SectionsRepository {
   CollectionReference<Map<String, dynamic>> get _academicYears =>
       _firestore.collection(FirestorePaths.academicYears);
 
+  CollectionReference<Map<String, dynamic>> get _users =>
+      _firestore.collection('users');
+
   Future<List<SchoolSection>> getSections(String schoolId) async {
     final snapshot =
         await _sections.where('schoolId', isEqualTo: schoolId).get();
@@ -53,7 +56,8 @@ class SectionsRepository {
         .toList();
 
     classes.sort((a, b) {
-      final order = (a.sortOrder ?? 999999).compareTo(b.sortOrder ?? 999999);
+      final order =
+          (a.sortOrder ?? 999999).compareTo(b.sortOrder ?? 999999);
 
       return order != 0
           ? order
@@ -87,25 +91,21 @@ class SectionsRepository {
   }) async {
     final normalizedName = name.trim();
 
-    if (schoolId.trim().isEmpty) {
-      throw ArgumentError('School ID available nahi hai.');
-    }
-
-    if (classId.trim().isEmpty) {
-      throw ArgumentError('Class select karein.');
-    }
-
-    if (normalizedName.isEmpty) {
-      throw ArgumentError('Section ka naam enter karein.');
-    }
-
-    if (capacity != null && capacity <= 0) {
-      throw ArgumentError('Capacity zero se zyada honi chahiye.');
-    }
+    _validateSectionInput(
+      schoolId: schoolId,
+      classId: classId,
+      name: normalizedName,
+      capacity: capacity,
+    );
 
     await _verifyClass(
       schoolId: schoolId,
       classId: classId,
+    );
+
+    await _verifyClassTeacher(
+      schoolId: schoolId,
+      classTeacherId: classTeacherId,
     );
 
     final existing = await _sections
@@ -132,7 +132,7 @@ class SectionsRepository {
       classId: classId,
       name: normalizedName,
       academicYearId: academicYearId,
-      classTeacherId: classTeacherId,
+      classTeacherId: _normalizeTeacherId(classTeacherId),
       capacity: capacity,
       isActive: true,
       createdAt: now,
@@ -154,21 +154,12 @@ class SectionsRepository {
   }) async {
     final normalizedName = name.trim();
 
-    if (schoolId.trim().isEmpty) {
-      throw ArgumentError('School ID available nahi hai.');
-    }
-
-    if (classId.trim().isEmpty) {
-      throw ArgumentError('Class select karein.');
-    }
-
-    if (normalizedName.isEmpty) {
-      throw ArgumentError('Section ka naam enter karein.');
-    }
-
-    if (capacity != null && capacity <= 0) {
-      throw ArgumentError('Capacity zero se zyada honi chahiye.');
-    }
+    _validateSectionInput(
+      schoolId: schoolId,
+      classId: classId,
+      name: normalizedName,
+      capacity: capacity,
+    );
 
     final sectionRef = _sections.doc(sectionId);
     final currentSnapshot = await sectionRef.get();
@@ -183,6 +174,11 @@ class SectionsRepository {
     await _verifyClass(
       schoolId: schoolId,
       classId: classId,
+    );
+
+    await _verifyClassTeacher(
+      schoolId: schoolId,
+      classTeacherId: classTeacherId,
     );
 
     final existing = await _sections
@@ -207,9 +203,84 @@ class SectionsRepository {
       'classId': classId,
       'name': normalizedName,
       'academicYearId': academicYearId,
-      'classTeacherId': classTeacherId,
+      'classTeacherId': _normalizeTeacherId(classTeacherId),
       'capacity': capacity,
       'isActive': isActive,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Assigns or changes the Class Teacher for an existing section.
+  ///
+  /// [classTeacherId] must be the teacher's Firebase Authentication UID,
+  /// which is also the document ID in the users collection.
+  Future<void> assignClassTeacher({
+    required String schoolId,
+    required String sectionId,
+    required String classTeacherId,
+  }) async {
+    final normalizedSchoolId = schoolId.trim();
+    final normalizedSectionId = sectionId.trim();
+    final normalizedTeacherId = classTeacherId.trim();
+
+    if (normalizedSchoolId.isEmpty) {
+      throw ArgumentError('School ID available nahi hai.');
+    }
+
+    if (normalizedSectionId.isEmpty) {
+      throw ArgumentError('Section select karein.');
+    }
+
+    if (normalizedTeacherId.isEmpty) {
+      throw ArgumentError('Class Teacher select karein.');
+    }
+
+    final sectionRef = _sections.doc(normalizedSectionId);
+    final sectionSnapshot = await sectionRef.get();
+
+    if (!sectionSnapshot.exists ||
+        sectionSnapshot.data()?['schoolId'] != normalizedSchoolId) {
+      throw Exception(
+        'Section nahi mila ya school se belong nahi karta.',
+      );
+    }
+
+    await _verifyClassTeacher(
+      schoolId: normalizedSchoolId,
+      classTeacherId: normalizedTeacherId,
+    );
+
+    await sectionRef.update({
+      'classTeacherId': normalizedTeacherId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Removes the Class Teacher from a section without deleting the account.
+  Future<void> removeClassTeacher({
+    required String schoolId,
+    required String sectionId,
+  }) async {
+    final normalizedSchoolId = schoolId.trim();
+    final normalizedSectionId = sectionId.trim();
+
+    if (normalizedSchoolId.isEmpty ||
+        normalizedSectionId.isEmpty) {
+      throw ArgumentError('School ID aur section ID zaroori hain.');
+    }
+
+    final sectionRef = _sections.doc(normalizedSectionId);
+    final snapshot = await sectionRef.get();
+
+    if (!snapshot.exists ||
+        snapshot.data()?['schoolId'] != normalizedSchoolId) {
+      throw Exception(
+        'Section nahi mila ya school se belong nahi karta.',
+      );
+    }
+
+    await sectionRef.update({
+      'classTeacherId': FieldValue.delete(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -246,6 +317,77 @@ class SectionsRepository {
       throw Exception(
         'Selected class nahi mili ya school se belong nahi karti.',
       );
+    }
+  }
+
+  Future<void> _verifyClassTeacher({
+    required String schoolId,
+    required String? classTeacherId,
+  }) async {
+    final teacherId = _normalizeTeacherId(classTeacherId);
+
+    // No teacher is also a valid option while creating/editing a section.
+    if (teacherId == null) return;
+
+    final teacherSnapshot = await _users.doc(teacherId).get();
+
+    if (!teacherSnapshot.exists) {
+      throw Exception(
+        'Selected teacher ka Firebase user profile nahi mila.',
+      );
+    }
+
+    final teacher = teacherSnapshot.data()!;
+
+    if (teacher['schoolId'] != schoolId) {
+      throw Exception(
+        'Selected teacher is school se belong nahi karta.',
+      );
+    }
+
+    if (teacher['role'] != 'classTeacher') {
+      throw Exception(
+        'Selected staff member ka role Class Teacher nahi hai.',
+      );
+    }
+
+    if (teacher['isActive'] == false) {
+      throw Exception(
+        'Selected Class Teacher ka account inactive hai.',
+      );
+    }
+  }
+
+  String? _normalizeTeacherId(String? value) {
+    final normalized = value?.trim();
+
+    if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  void _validateSectionInput({
+    required String schoolId,
+    required String classId,
+    required String name,
+    required int? capacity,
+  }) {
+    if (schoolId.trim().isEmpty) {
+      throw ArgumentError('School ID available nahi hai.');
+    }
+
+    if (classId.trim().isEmpty) {
+      throw ArgumentError('Class select karein.');
+    }
+
+    if (name.isEmpty) {
+      throw ArgumentError('Section ka naam enter karein.');
+    }
+
+    if (capacity != null && capacity <= 0) {
+      throw ArgumentError('Capacity zero se zyada honi chahiye.');
     }
   }
 }
