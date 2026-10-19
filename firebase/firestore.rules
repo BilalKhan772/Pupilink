@@ -343,6 +343,76 @@ service cloud.firestore {
     }
 
     // ============================
+    // TIMETABLE
+    // ============================
+
+    match /timetable/{entryId} {
+
+      // Staff can read timetable entries for their own school.
+      allow read:
+        if isSchoolStaff()
+        && resource.data.schoolId == userData().schoolId;
+
+      // Only the school admin can create timetable entries.
+      // Class and section must belong to the same school.
+      allow create:
+        if isSchoolAdmin()
+        && request.resource.data.schoolId == userData().schoolId
+        && request.resource.data.classId is string
+        && request.resource.data.sectionId is string
+        && request.resource.data.day is string
+        && request.resource.data.day.size() > 0
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() > 0
+        && request.resource.data.startTime is string
+        && request.resource.data.startTime.size() > 0
+        && request.resource.data.endTime is string
+        && request.resource.data.endTime.size() > 0
+        && classBelongsToSchool(
+          request.resource.data.classId,
+          request.resource.data.schoolId
+        )
+        && sectionBelongsToSchool(
+          request.resource.data.sectionId,
+          request.resource.data.schoolId,
+          request.resource.data.classId
+        );
+
+      // Only the school admin can update timetable entries.
+      // The entry cannot be moved to a different school,
+      // class or section through an update.
+      allow update:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId
+        && request.resource.data.schoolId == resource.data.schoolId
+        && request.resource.data.classId == resource.data.classId
+        && request.resource.data.sectionId == resource.data.sectionId
+        && request.resource.data.day is string
+        && request.resource.data.day.size() > 0
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() > 0
+        && request.resource.data.startTime is string
+        && request.resource.data.startTime.size() > 0
+        && request.resource.data.endTime is string
+        && request.resource.data.endTime.size() > 0
+        && classBelongsToSchool(
+          request.resource.data.classId,
+          request.resource.data.schoolId
+        )
+        && sectionBelongsToSchool(
+          request.resource.data.sectionId,
+          request.resource.data.schoolId,
+          request.resource.data.classId
+        );
+
+      // Only the school admin can delete timetable entries
+      // belonging to their own school.
+      allow delete:
+        if isSchoolAdmin()
+        && resource.data.schoolId == userData().schoolId;
+    }
+
+    // ============================
     // ACTIVE SUBJECT ASSIGNMENT
     // ============================
 

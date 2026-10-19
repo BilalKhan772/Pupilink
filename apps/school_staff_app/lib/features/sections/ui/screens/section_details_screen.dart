@@ -5,6 +5,7 @@ import 'package:school_models/school_models.dart';
 
 import '../../../students/data/students_repository.dart';
 import '../../../students/ui/screens/all_students_screen.dart';
+import '../../../timetable/ui/screens/timetable_screen.dart';
 import '../../data/subjects_teacher_repository.dart';
 import 'subjects_teacher_screen.dart';
 
@@ -175,6 +176,21 @@ class _SectionDetailsScreenState
     }
   }
 
+  // Opens the timetable for the currently selected section.
+  Future<void> _openTimetable() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => TimetableScreen(
+          schoolId: widget.section.schoolId,
+          classId: widget.section.classId,
+          className: widget.className,
+          sectionId: widget.section.id,
+          sectionName: widget.section.name,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final section = widget.section;
@@ -297,6 +313,8 @@ class _SectionDetailsScreenState
                       _openAllStudents();
                     } else if (feature == 'Subjects & Teacher') {
                       _openSubjectsTeacher();
+                    } else if (feature == 'Time Table') {
+                      _openTimetable();
                     } else {
                       _showNotConnectedMessage(feature);
                     }
