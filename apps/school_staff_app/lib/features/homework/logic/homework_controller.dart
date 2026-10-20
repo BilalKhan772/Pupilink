@@ -22,16 +22,26 @@ class HomeworkController extends Notifier<HomeworkState> {
     );
 
     try {
-      final assignment =
-          await ref.read(homeworkRepositoryProvider).getMonitorAssignment();
+      final repository = ref.read(homeworkRepositoryProvider);
+      final assignment = await repository.getMonitorAssignment();
+
+      final schoolId = assignment['schoolId'] as String? ?? '';
+      final sectionId = assignment['sectionId'] as String? ?? '';
+
+      final recentHomework = await repository.getRecentHomework(
+        schoolId: schoolId,
+        sectionId: sectionId,
+      );
 
       state = state.copyWith(
         isLoading: false,
-        schoolId: assignment['schoolId'] as String? ?? '',
+        schoolId: schoolId,
         classId: assignment['classId'] as String? ?? '',
-        sectionId: assignment['sectionId'] as String? ?? '',
+        className: assignment['className'] as String? ?? '',
+        sectionId: sectionId,
         sectionName: assignment['sectionName'] as String? ?? '',
         monitorName: assignment['monitorName'] as String? ?? '',
+        recentHomework: recentHomework,
         clearError: true,
       );
     } catch (error) {
@@ -44,23 +54,12 @@ class HomeworkController extends Notifier<HomeworkState> {
 
   Future<bool> publishHomework({
     required String title,
-    required String subject,
     required String description,
     required DateTime dueDate,
   }) async {
-    if (title.trim().isEmpty ||
-        subject.trim().isEmpty ||
-        description.trim().isEmpty) {
+    if (title.trim().isEmpty || description.trim().isEmpty) {
       state = state.copyWith(
-        errorMessage: 'Title, subject aur description fill karein.',
-        clearSuccess: true,
-      );
-      return false;
-    }
-
-    if (title.trim().length > 150) {
-      state = state.copyWith(
-        errorMessage: 'Title 150 characters se chhota rakhein.',
+        errorMessage: 'Title aur description fill karein.',
         clearSuccess: true,
       );
       return false;
@@ -74,13 +73,9 @@ class HomeworkController extends Notifier<HomeworkState> {
       return false;
     }
 
-    // Aaj ki date allowed hai; sirf guzri hui date reject hogi.
-    final selectedDate = DateUtils.dateOnly(dueDate);
-    final today = DateUtils.dateOnly(DateTime.now());
-
-    if (selectedDate.isBefore(today)) {
+    if (dueDate.isBefore(DateUtils.dateOnly(DateTime.now()))) {
       state = state.copyWith(
-        errorMessage: 'Due date aaj ya future mein select karein.',
+        errorMessage: 'Due date aaj ya future ki select karein.',
         clearSuccess: true,
       );
       return false;
@@ -93,17 +88,23 @@ class HomeworkController extends Notifier<HomeworkState> {
     );
 
     try {
-      final count = await ref.read(homeworkRepositoryProvider).publishHomework(
-            title: title,
-            subject: subject,
-            description: description,
-            dueDate: dueDate,
-          );
+      final repository = ref.read(homeworkRepositoryProvider);
+
+      final count = await repository.publishHomework(
+        title: title,
+        description: description,
+        dueDate: dueDate,
+      );
+
+      final recentHomework = await repository.getRecentHomework(
+        schoolId: state.schoolId,
+        sectionId: state.sectionId,
+      );
 
       state = state.copyWith(
         isSaving: false,
-        successMessage:
-            'Homework $count students ke liye publish ho gaya.',
+        recentHomework: recentHomework,
+        successMessage: 'Homework $count students ke liye publish ho gaya.',
         clearError: true,
       );
 

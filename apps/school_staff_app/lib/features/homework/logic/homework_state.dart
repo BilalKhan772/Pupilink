@@ -5,9 +5,11 @@ class HomeworkState {
     this.isSaving = false,
     this.schoolId = '',
     this.classId = '',
+    this.className = '',
     this.sectionId = '',
     this.sectionName = '',
     this.monitorName = '',
+    this.recentHomework = const [],
     this.errorMessage,
     this.successMessage,
   });
@@ -16,9 +18,11 @@ class HomeworkState {
   final bool isSaving;
   final String schoolId;
   final String classId;
+  final String className;
   final String sectionId;
   final String sectionName;
   final String monitorName;
+  final List<Map<String, dynamic>> recentHomework;
   final String? errorMessage;
   final String? successMessage;
 
@@ -30,9 +34,11 @@ class HomeworkState {
     bool? isSaving,
     String? schoolId,
     String? classId,
+    String? className,
     String? sectionId,
     String? sectionName,
     String? monitorName,
+    List<Map<String, dynamic>>? recentHomework,
     String? errorMessage,
     String? successMessage,
     bool clearError = false,
@@ -43,10 +49,13 @@ class HomeworkState {
       isSaving: isSaving ?? this.isSaving,
       schoolId: schoolId ?? this.schoolId,
       classId: classId ?? this.classId,
+      className: className ?? this.className,
       sectionId: sectionId ?? this.sectionId,
       sectionName: sectionName ?? this.sectionName,
       monitorName: monitorName ?? this.monitorName,
-      errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+      recentHomework: recentHomework ?? this.recentHomework,
+      errorMessage:
+          clearError ? null : errorMessage ?? this.errorMessage,
       successMessage:
           clearSuccess ? null : successMessage ?? this.successMessage,
     );

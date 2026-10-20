@@ -1,13 +1,12 @@
+
 import 'package:flutter/material.dart';
 
 import 'homework_card.dart';
 
-class HomeworkDateGroup
-    extends StatelessWidget {
+class HomeworkDateGroup extends StatelessWidget {
   final String date;
   final List<Map<String, dynamic>> homework;
-  final ValueChanged<Map<String, dynamic>>
-      onHomeworkTap;
+  final ValueChanged<Map<String, dynamic>> onHomeworkTap;
 
   const HomeworkDateGroup({
     super.key,
@@ -16,44 +15,39 @@ class HomeworkDateGroup
     required this.onHomeworkTap,
   });
 
+  String _formatDate(String value) {
+    final parsed = DateTime.tryParse(value);
+
+    if (parsed == null) return value.isEmpty ? 'Date not available' : value;
+
+    return '${parsed.year.toString().padLeft(4, '0')}-'
+        '${parsed.month.toString().padLeft(2, '0')}-'
+        '${parsed.day.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding:
-              const EdgeInsets.only(
-            bottom: 10,
-          ),
+          padding: const EdgeInsets.only(bottom: 10),
           child: Text(
-            date.isEmpty
-                ? 'Date not available'
-                : date,
+            _formatDate(date),
             style: const TextStyle(
               fontSize: 18,
-              fontWeight:
-                  FontWeight.bold,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ),
-
         ...homework.map(
-          (item) {
-            return Padding(
-              padding:
-                  const EdgeInsets.only(
-                bottom: 12,
-              ),
-              child: HomeworkCard(
-                homework: item,
-                onTap: () {
-                  onHomeworkTap(item);
-                },
-              ),
-            );
-          },
+          (item) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: HomeworkCard(
+              homework: item,
+              onTap: () => onHomeworkTap(item),
+            ),
+          ),
         ),
       ],
     );

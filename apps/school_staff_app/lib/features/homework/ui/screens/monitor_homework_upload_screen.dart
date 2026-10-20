@@ -19,10 +19,10 @@ class _MonitorHomeworkUploadScreenState
   @override
   void initState() {
     super.initState();
-
     Future.microtask(() {
-      if (!mounted) return;
-      ref.read(homeworkControllerProvider.notifier).loadAssignment();
+      if (mounted) {
+        ref.read(homeworkControllerProvider.notifier).loadAssignment();
+      }
     });
   }
 
@@ -56,7 +56,7 @@ class _MonitorHomeworkUploadScreenState
         title: const Text('Upload Homework'),
         actions: [
           IconButton(
-            tooltip: 'Refresh assignment',
+            tooltip: 'Refresh',
             onPressed: state.isLoading
                 ? null
                 : () => ref
@@ -68,83 +68,154 @@ class _MonitorHomeworkUploadScreenState
       ),
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : state.errorMessage != null && !state.hasAssignment
+          : !state.hasAssignment
               ? _buildError(state)
-              : !state.hasAssignment
-                  ? _buildError(state)
-                  : RefreshIndicator(
-                      onRefresh: () => ref
-                          .read(homeworkControllerProvider.notifier)
-                          .loadAssignment(),
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Your Assignment',
-                                    style:
-                                        Theme.of(context).textTheme.titleLarge,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  _infoRow(
-                                    Icons.school_outlined,
-                                    'Class ID',
-                                    state.classId.isEmpty
-                                        ? 'Not available'
-                                        : state.classId,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  _infoRow(
-                                    Icons.groups_outlined,
-                                    'Section',
-                                    state.sectionName.isEmpty
-                                        ? state.sectionId
-                                        : state.sectionName,
-                                  ),
-                                ],
+              : RefreshIndicator(
+                  onRefresh: () => ref
+                      .read(homeworkControllerProvider.notifier)
+                      .loadAssignment(),
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Your Assignment',
+                                style: Theme.of(context).textTheme.titleLarge,
                               ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'Create New Homework',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 12),
-                          Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: HomeworkEntryForm(
-                                isSaving: state.isSaving,
-                                onSubmit: ({
-                                  required title,
-                                  required subject,
-                                  required description,
-                                  required dueDate,
-                                }) {
-                                  return ref
-                                      .read(
-                                        homeworkControllerProvider.notifier,
-                                      )
-                                      .publishHomework(
-                                        title: title,
-                                        subject: subject,
-                                        description: description,
-                                        dueDate: dueDate,
-                                      );
-                                },
+                              const SizedBox(height: 12),
+                              _infoRow(
+                                Icons.school_outlined,
+                                'Class',
+                                state.className.isNotEmpty
+                                    ? state.className
+                                    : 'Not available',
                               ),
-                            ),
+                              const SizedBox(height: 8),
+                              _infoRow(
+                                Icons.groups_outlined,
+                                'Section',
+                                state.sectionName.isNotEmpty
+                                    ? state.sectionName
+                                    : 'Not available',
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Create New Homework',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: HomeworkEntryForm(
+                            isSaving: state.isSaving,
+                            onSubmit: ({
+                              required title,
+                              required description,
+                              required dueDate,
+                            }) {
+                              return ref
+                                  .read(homeworkControllerProvider.notifier)
+                                  .publishHomework(
+                                    title: title,
+                                    description: description,
+                                    dueDate: dueDate,
+                                  );
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Uploaded Homework',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 12),
+                      if (state.recentHomework.isEmpty)
+                        const Card(
+                          child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Center(
+                              child: Text('Abhi tak homework upload nahi hua.'),
+                            ),
+                          ),
+                        )
+                      else
+                        ...state.recentHomework.map(
+                          (homework) => _homeworkCard(homework),
+                        ),
+                    ],
+                  ),
+                ),
     );
+  }
+
+  Widget _homeworkCard(Map<String, dynamic> homework) {
+    final title = homework['title'] as String? ?? 'Homework';
+    final description = homework['description'] as String? ?? '';
+    final dueDate = _formatDate(homework['dueDate']);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (description.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(description),
+            ],
+            if (dueDate.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today_outlined, size: 16),
+                  const SizedBox(width: 6),
+                  Text('Due: $dueDate'),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(dynamic value) {
+    if (value is DateTime) {
+      return '${value.year.toString().padLeft(4, '0')}-'
+          '${value.month.toString().padLeft(2, '0')}-'
+          '${value.day.toString().padLeft(2, '0')}';
+    }
+
+    if (value is String && value.isNotEmpty) {
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) {
+        return '${parsed.year.toString().padLeft(4, '0')}-'
+            '${parsed.month.toString().padLeft(2, '0')}-'
+            '${parsed.day.toString().padLeft(2, '0')}';
+      }
+    }
+
+    return '';
   }
 
   Widget _buildError(HomeworkState state) {

@@ -23,6 +23,7 @@ class _MonitorDashboardScreenState
   Future<String?>? _classNameFuture;
   String? _loadedSchoolId;
   String? _loadedClassId;
+  bool _isLoggingOut = false;
 
   @override
   void didChangeDependencies() {
@@ -75,34 +76,48 @@ class _MonitorDashboardScreenState
     return null;
   }
 
-  Future<void> _refreshClassName() async {
-    final profile = ref.read(staffAuthControllerProvider).profile;
+  Future<void> _logout() async {
+    if (_isLoggingOut) return;
 
-    final schoolId = profile?['schoolId'] as String? ?? '';
-    final classId = profile?['classId'] as String? ?? '';
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text(
+          'Kya aap waqai apne account se logout karna chahte hain?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
 
-    if (schoolId.isEmpty || classId.isEmpty) {
-      setState(() {
-        _classNameFuture = null;
-        _loadedSchoolId = schoolId;
-        _loadedClassId = classId;
-      });
-      return;
-    }
+    if (shouldLogout != true || !mounted) return;
 
-    setState(() {
-      _loadedSchoolId = schoolId;
-      _loadedClassId = classId;
-      _classNameFuture = _fetchClassName(
-        schoolId: schoolId,
-        classId: classId,
-      );
-    });
+    setState(() => _isLoggingOut = true);
 
     try {
-      await _classNameFuture;
-    } catch (_) {
-      // FutureBuilder error state handle karega.
+      await ref.read(staffAuthControllerProvider.notifier).signOut();
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() => _isLoggingOut = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Logout nahi ho saka: ${error.toString().replaceFirst('Exception: ', '')}',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -140,12 +155,21 @@ class _MonitorDashboardScreenState
         elevation: 0,
         actions: [
           IconButton(
-            tooltip: 'Refresh section information',
-            onPressed: _refreshClassName,
-            icon: const Icon(
-              Icons.refresh_rounded,
-              color: _green,
-            ),
+            tooltip: 'Logout',
+            onPressed: _isLoggingOut ? null : _logout,
+            icon: _isLoggingOut
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _green,
+                    ),
+                  )
+                : const Icon(
+                    Icons.logout_rounded,
+                    color: _green,
+                  ),
           ),
         ],
       ),
@@ -279,8 +303,6 @@ class _MonitorDashboardScreenState
                 ],
               ),
             ),
-
-            // Homework upload section.
             const SizedBox(height: 22),
             const Text(
               'Homework Management',

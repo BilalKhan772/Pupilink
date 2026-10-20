@@ -12,7 +12,6 @@ class HomeworkEntryForm extends StatefulWidget {
 
   final Future<bool> Function({
     required String title,
-    required String subject,
     required String description,
     required DateTime dueDate,
   }) onSubmit;
@@ -24,7 +23,6 @@ class HomeworkEntryForm extends StatefulWidget {
 class _HomeworkEntryFormState extends State<HomeworkEntryForm> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
-  final _subjectController = TextEditingController();
   final _descriptionController = TextEditingController();
 
   DateTime? _dueDate;
@@ -32,7 +30,6 @@ class _HomeworkEntryFormState extends State<HomeworkEntryForm> {
   @override
   void dispose() {
     _titleController.dispose();
-    _subjectController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -49,9 +46,7 @@ class _HomeworkEntryFormState extends State<HomeworkEntryForm> {
     );
 
     if (selected != null && mounted) {
-      setState(() {
-        _dueDate = selected;
-      });
+      setState(() => _dueDate = selected);
     }
   }
 
@@ -69,7 +64,6 @@ class _HomeworkEntryFormState extends State<HomeworkEntryForm> {
 
     final success = await widget.onSubmit(
       title: _titleController.text,
-      subject: _subjectController.text,
       description: _descriptionController.text,
       dueDate: _dueDate!,
     );
@@ -77,12 +71,8 @@ class _HomeworkEntryFormState extends State<HomeworkEntryForm> {
     if (success && mounted) {
       _formKey.currentState!.reset();
       _titleController.clear();
-      _subjectController.clear();
       _descriptionController.clear();
-
-      setState(() {
-        _dueDate = null;
-      });
+      setState(() => _dueDate = null);
     }
   }
 
@@ -120,29 +110,12 @@ class _HomeworkEntryFormState extends State<HomeworkEntryForm> {
           ),
           const SizedBox(height: 14),
           TextFormField(
-            controller: _subjectController,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Subject',
-              hintText: 'e.g. Mathematics',
-              prefixIcon: Icon(Icons.subject),
-              border: OutlineInputBorder(),
-            ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Subject enter karein.';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 14),
-          TextFormField(
             controller: _descriptionController,
             minLines: 4,
             maxLines: 8,
             textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(
-              labelText: 'Homework Instructions',
+              labelText: 'Description',
               hintText: 'Students ko batayein ke kya complete karna hai.',
               alignLabelWithHint: true,
               prefixIcon: Icon(Icons.description_outlined),
@@ -150,7 +123,7 @@ class _HomeworkEntryFormState extends State<HomeworkEntryForm> {
             ),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
-                return 'Homework instructions enter karein.';
+                return 'Description enter karein.';
               }
               if (value.trim().length > 5000) {
                 return 'Description 5000 characters se chhoti rakhein.';
@@ -180,7 +153,7 @@ class _HomeworkEntryFormState extends State<HomeworkEntryForm> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Publish karne par homework aapki assigned section ke students ke parent accounts mein available hoga.',
+            'Publish karne par homework assigned section ke students ke parent accounts mein available hoga.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],

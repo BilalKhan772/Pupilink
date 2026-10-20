@@ -50,19 +50,68 @@ class HomeworkRepository {
       );
     }
 
+    var className = '';
+
+    if (classId.isNotEmpty) {
+      final classSnapshot =
+          await _firestore.collection('classes').doc(classId).get();
+
+      if (classSnapshot.exists) {
+        className = classSnapshot.data()?['name'] as String? ?? '';
+      }
+    }
+
     return {
       'uid': user.uid,
       'schoolId': schoolId,
       'classId': classId,
+      'className': className,
       'sectionId': sectionId,
       'sectionName': sectionName,
       'monitorName': monitorName,
     };
   }
 
+  Future<List<Map<String, dynamic>>> getRecentHomework({
+    required String schoolId,
+    required String sectionId,
+  }) async {
+    if (schoolId.isEmpty || sectionId.isEmpty) {
+      return <Map<String, dynamic>>[];
+    }
+
+    final snapshot = await _firestore
+        .collection('homework')
+        .where('schoolId', isEqualTo: schoolId)
+        .where('sectionId', isEqualTo: sectionId)
+        .get();
+
+    final records = snapshot.docs.map((document) {
+      return <String, dynamic>{
+        'id': document.id,
+        ...document.data(),
+      };
+    }).toList();
+
+    records.sort((a, b) {
+      return _dateValue(b['assignedAt'])
+          .compareTo(_dateValue(a['assignedAt']));
+    });
+
+    return records;
+  }
+
+  DateTime _dateValue(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime(2000);
+    }
+    return DateTime(2000);
+  }
+
   Future<int> publishHomework({
     required String title,
-    required String subject,
     required String description,
     required DateTime dueDate,
   }) async {
@@ -85,14 +134,15 @@ class HomeworkRepository {
       );
     }
 
-    final now = DateTime.now();
-    final dueDateString = dueDate.toIso8601String();
+    final dueDateString =
+        '${dueDate.year.toString().padLeft(4, '0')}-'
+        '${dueDate.month.toString().padLeft(2, '0')}-'
+        '${dueDate.day.toString().padLeft(2, '0')}';
+
     final students = studentsSnapshot.docs;
 
-    // Firestore batch ki limit 500 writes hai.
-    // Har student ke liye ek record create hota hai.
     for (var start = 0; start < students.length; start += 450) {
-      final end = (start + 450 < students.length)
+      final end = start + 450 < students.length
           ? start + 450
           : students.length;
 
@@ -106,7 +156,11 @@ class HomeworkRepository {
           'classId': classId,
           'sectionId': sectionId,
           'studentId': student.id,
-          'subject': subject.trim(),
+
+          // UI se subject hata diya hai.
+          // Yeh hidden default purane Firestore rules ke liye hai.
+          'subject': 'Homework',
+
           'title': title.trim(),
           'description': description.trim(),
           'attachmentUrl': null,
