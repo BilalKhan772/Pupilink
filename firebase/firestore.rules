@@ -126,6 +126,28 @@ service cloud.firestore {
     }
 
     // ============================
+    // MONITOR ASSIGNMENT HELPER
+    // ============================
+
+    // A monitor must still be assigned to the section
+    // in the actual section document.
+    function monitorAssignedToSection(sectionId, schoolId) {
+      return isSchoolStaff()
+        && userData().role == 'monitor'
+        && userData().schoolId == schoolId
+        && userData().sectionId == sectionId
+        && exists(
+          /databases/$(database)/documents/sections/$(sectionId)
+        )
+        && get(
+          /databases/$(database)/documents/sections/$(sectionId)
+        ).data.schoolId == schoolId
+        && get(
+          /databases/$(database)/documents/sections/$(sectionId)
+        ).data.monitorId == request.auth.uid;
+    }
+
+    // ============================
     // USERS
     // ============================
 
@@ -410,6 +432,107 @@ service cloud.firestore {
       allow delete:
         if isSchoolAdmin()
         && resource.data.schoolId == userData().schoolId;
+    }
+
+    // ============================
+    // HOMEWORK
+    // ============================
+
+    match /homework/{homeworkId} {
+
+      // Parents can read only homework for children
+      // with an approved parent-child link.
+      //
+      // Same-school staff can read homework records
+      // belonging to their school.
+      allow get, list:
+        if isSignedIn()
+        && (
+          (
+            isParent()
+            && resource.data.studentId is string
+            && isParentLinkedToStudent(resource.data.studentId)
+          )
+          ||
+          (
+            isSchoolStaff()
+            && resource.data.schoolId == userData().schoolId
+          )
+        );
+
+      // Monitors can create homework only for their assigned section.
+      // Each homework document must refer to a real student in that
+      // same school and section.
+      allow create:
+        if isSignedIn()
+        && monitorAssignedToSection(
+          request.resource.data.sectionId,
+          request.resource.data.schoolId
+        )
+        && request.resource.data.keys().hasAll([
+          'schoolId',
+          'classId',
+          'sectionId',
+          'studentId',
+          'subject',
+          'title',
+          'description',
+          'attachmentUrl',
+          'assignedBy',
+          'assignedAt',
+          'createdAt',
+          'dueDate',
+          'status'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'schoolId',
+          'classId',
+          'sectionId',
+          'studentId',
+          'subject',
+          'title',
+          'description',
+          'attachmentUrl',
+          'assignedBy',
+          'assignedAt',
+          'createdAt',
+          'dueDate',
+          'status'
+        ])
+        && request.resource.data.schoolId == userData().schoolId
+        && request.resource.data.classId == userData().classId
+        && request.resource.data.sectionId == userData().sectionId
+        && request.resource.data.studentId is string
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() > 0
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 150
+        && request.resource.data.description is string
+        && request.resource.data.description.size() > 0
+        && request.resource.data.description.size() <= 5000
+        && request.resource.data.attachmentUrl == null
+        && request.resource.data.assignedBy == request.auth.uid
+        && request.resource.data.assignedAt == request.time
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.dueDate is string
+        && request.resource.data.status == 'pending'
+        && exists(
+          /databases/$(database)/documents/students/$(request.resource.data.studentId)
+        )
+        && get(
+          /databases/$(database)/documents/students/$(request.resource.data.studentId)
+        ).data.schoolId == userData().schoolId
+        && get(
+          /databases/$(database)/documents/students/$(request.resource.data.studentId)
+        ).data.sectionId == userData().sectionId
+        && get(
+          /databases/$(database)/documents/sections/$(userData().sectionId)
+        ).data.classId == userData().classId;
+
+      // Homework cannot be edited or deleted directly by clients.
+      // Trusted backend functions can be added later if needed.
+      allow update, delete: if false;
     }
 
     // ============================

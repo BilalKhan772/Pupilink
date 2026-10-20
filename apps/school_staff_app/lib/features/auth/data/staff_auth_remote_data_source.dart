@@ -27,58 +27,79 @@ class StaffAuthRemoteDataSource {
       throw Exception('Login unsuccessful. Please try again.');
     }
 
-    final document = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .get();
+    try {
+      final document = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
-    if (!document.exists || document.data() == null) {
-      await _auth.signOut();
-      throw Exception(
-        'Staff profile nahi mila. Administrator se rabta karein.',
-      );
+      if (!document.exists || document.data() == null) {
+        await _auth.signOut();
+        throw Exception(
+          'Staff profile nahi mila. Administrator se rabta karein.',
+        );
+      }
+
+      final data = document.data()!;
+
+      final profileEmail =
+          (data['email'] as String? ?? '').trim();
+
+      if (profileEmail.isNotEmpty &&
+          profileEmail.toLowerCase() !=
+              (user.email ?? '').toLowerCase()) {
+        await _auth.signOut();
+        throw Exception('Staff profile email match nahi karta.');
+      }
+
+      final role = data['role'] as String? ?? '';
+
+      const allowedRoles = {
+        'schoolAdmin',
+        'classTeacher',
+        'subjectTeacher',
+        'monitor',
+      };
+
+      if (!allowedRoles.contains(role)) {
+        await _auth.signOut();
+        throw Exception(
+          'Is account ko School Staff App access ki ijazat nahi hai.',
+        );
+      }
+
+      final schoolId =
+          (data['schoolId'] as String? ?? '').trim();
+
+      if (schoolId.isEmpty) {
+        await _auth.signOut();
+        throw Exception(
+          'Staff profile mein schoolId maujood nahi.',
+        );
+      }
+
+      // Original Firestore profile fields preserve karein.
+      // Monitor ke classId, sectionId aur sectionName bhi
+      // auth controller tak pohanch jayenge.
+      return <String, dynamic>{
+        ...data,
+        'uid': user.uid,
+        'email': user.email ?? profileEmail,
+        'name': data['name'] as String? ?? 'Staff Member',
+        'role': role,
+        'schoolId': schoolId,
+        'classId': data['classId'] as String? ?? '',
+        'sectionId': data['sectionId'] as String? ?? '',
+        'sectionName': data['sectionName'] as String? ?? '',
+      };
+    } catch (_) {
+      // Login/profile read fail ho to authenticated session
+      // ko khula na chhorein.
+      if (_auth.currentUser?.uid == user.uid) {
+        await _auth.signOut();
+      }
+      rethrow;
     }
-
-    final data = document.data()!;
-
-    final profileEmail = (data['email'] as String? ?? '').trim();
-
-    if (profileEmail.isNotEmpty &&
-        profileEmail.toLowerCase() != user.email?.toLowerCase()) {
-      await _auth.signOut();
-      throw Exception('Staff profile email match nahi karta.');
-    }
-
-    final role = data['role'] as String? ?? '';
-
-    const allowedRoles = {
-      'schoolAdmin',
-      'classTeacher',
-      'subjectTeacher',
-      'monitor',
-    };
-
-    if (!allowedRoles.contains(role)) {
-      await _auth.signOut();
-      throw Exception(
-        'Is account ko School Staff App access ki ijazat nahi hai.',
-      );
-    }
-
-    final schoolId = data['schoolId'] as String? ?? '';
-
-    if (role != 'superAdmin' && schoolId.trim().isEmpty) {
-      await _auth.signOut();
-      throw Exception('Staff profile mein schoolId maujood nahi.');
-    }
-
-    return {
-      'uid': user.uid,
-      'email': user.email ?? '',
-      'name': data['name'] as String? ?? 'Staff Member',
-      'role': role,
-      'schoolId': schoolId,
-    };
   }
 
   Future<void> signOut() async {

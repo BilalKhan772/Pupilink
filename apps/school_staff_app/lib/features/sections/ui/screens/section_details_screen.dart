@@ -1,4 +1,5 @@
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:school_models/school_models.dart';
@@ -6,6 +7,7 @@ import 'package:school_models/school_models.dart';
 import '../../../students/data/students_repository.dart';
 import '../../../students/ui/screens/all_students_screen.dart';
 import '../../../timetable/ui/screens/timetable_screen.dart';
+import '../../../monitor/ui/add_monitor_screen.dart';
 import '../../data/subjects_teacher_repository.dart';
 import 'subjects_teacher_screen.dart';
 
@@ -45,11 +47,17 @@ class _SectionDetailsScreenState
   bool _isLoadingSectionSummary = true;
   String? _sectionSummaryError;
 
+  String? _monitorName;
+  String? _monitorEmail;
+  bool _isLoadingMonitor = true;
+  String? _monitorError;
+
   @override
   void initState() {
     super.initState();
     _loadStudentCount();
     _loadSectionSummary();
+    _loadMonitor();
   }
 
   Future<void> _loadStudentCount() async {
@@ -133,6 +141,69 @@ class _SectionDetailsScreenState
     }
   }
 
+  Future<void> _loadMonitor() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingMonitor = true;
+      _monitorError = null;
+    });
+
+    try {
+      final document = await FirebaseFirestore.instance
+          .collection('sections')
+          .doc(widget.section.id)
+          .get();
+
+      if (!mounted) return;
+
+      if (!document.exists || document.data() == null) {
+        setState(() {
+          _monitorName = null;
+          _monitorEmail = null;
+          _isLoadingMonitor = false;
+        });
+        return;
+      }
+
+      final data = document.data()!;
+
+      final monitorId = (data['monitorId'] as String? ?? '').trim();
+      final monitorName = (data['monitorName'] as String? ?? '').trim();
+      final monitorEmail = (data['monitorEmail'] as String? ?? '').trim();
+
+      setState(() {
+        _monitorName =
+            monitorId.isEmpty || monitorName.isEmpty ? null : monitorName;
+        _monitorEmail =
+            monitorId.isEmpty || monitorEmail.isEmpty ? null : monitorEmail;
+        _isLoadingMonitor = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _monitorError = 'Monitor information load nahi ho saki.';
+        _isLoadingMonitor = false;
+      });
+    }
+  }
+
+  Future<void> _openAddMonitor() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AddMonitorScreen(
+          section: widget.section,
+          className: widget.className,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    await _loadMonitor();
+  }
+
   void _showNotConnectedMessage(String feature) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -176,7 +247,6 @@ class _SectionDetailsScreenState
     }
   }
 
-  // Opens the timetable for the currently selected section.
   Future<void> _openTimetable() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -315,6 +385,8 @@ class _SectionDetailsScreenState
                       _openSubjectsTeacher();
                     } else if (feature == 'Time Table') {
                       _openTimetable();
+                    } else if (feature == 'Add Monitor') {
+                      _openAddMonitor();
                     } else {
                       _showNotConnectedMessage(feature);
                     }
@@ -340,8 +412,20 @@ class _SectionDetailsScreenState
                   isLoadingSectionSummary: _isLoadingSectionSummary,
                   sectionSummaryError: _sectionSummaryError,
                   onRetrySectionSummary: _loadSectionSummary,
+                  monitorName: _monitorName,
+                  monitorEmail: _monitorEmail,
+                  isLoadingMonitor: _isLoadingMonitor,
+                  monitorError: _monitorError,
+                  onRetryMonitor: _loadMonitor,
                 ),
                 const SizedBox(height: 24),
+                if (_monitorName != null)
+                  _MonitorInformationCard(
+                    name: _monitorName!,
+                    email: _monitorEmail,
+                    onManage: _openAddMonitor,
+                  ),
+                if (_monitorName != null) const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -397,6 +481,88 @@ class _SectionDetailsScreenState
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _MonitorInformationCard extends StatelessWidget {
+  const _MonitorInformationCard({
+    required this.name,
+    required this.email,
+    required this.onManage,
+  });
+
+  final String name;
+  final String? email;
+  final VoidCallback onManage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE4ECE6)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF6EF),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: const Icon(
+              Icons.verified_user_outlined,
+              color: Color(0xFF138A4B),
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Assigned Monitor',
+                  style: TextStyle(
+                    color: Color(0xFF758078),
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    color: Color(0xFF172B24),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (email != null && email!.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    email!,
+                    style: const TextStyle(
+                      color: Color(0xFF758078),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Manage monitor',
+            onPressed: onManage,
+            icon: const Icon(
+              Icons.edit_outlined,
+              color: Color(0xFF138A4B),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -712,6 +878,11 @@ class _SectionSummary extends StatelessWidget {
     required this.isLoadingSectionSummary,
     required this.sectionSummaryError,
     required this.onRetrySectionSummary,
+    required this.monitorName,
+    required this.monitorEmail,
+    required this.isLoadingMonitor,
+    required this.monitorError,
+    required this.onRetryMonitor,
   });
 
   final int? studentCount;
@@ -724,6 +895,12 @@ class _SectionSummary extends StatelessWidget {
   final bool isLoadingSectionSummary;
   final String? sectionSummaryError;
   final VoidCallback onRetrySectionSummary;
+
+  final String? monitorName;
+  final String? monitorEmail;
+  final bool isLoadingMonitor;
+  final String? monitorError;
+  final VoidCallback onRetryMonitor;
 
   @override
   Widget build(BuildContext context) {
@@ -778,13 +955,17 @@ class _SectionSummary extends StatelessWidget {
                   ? isLoadingStudents
                   : (isSubjects || isTeachers)
                       ? isLoadingSectionSummary
-                      : false;
+                      : isMonitor
+                          ? isLoadingMonitor
+                          : false;
 
               final hasError = isStudents
                   ? studentCountError != null
                   : (isSubjects || isTeachers)
                       ? sectionSummaryError != null
-                      : false;
+                      : isMonitor
+                          ? monitorError != null
+                          : false;
 
               final int? count = isStudents
                   ? studentCount
@@ -793,6 +974,9 @@ class _SectionSummary extends StatelessWidget {
                       : isTeachers
                           ? teachersCount
                           : null;
+
+              final displayMonitorName =
+                  isMonitor && monitorName != null && monitorName!.isNotEmpty;
 
               return SizedBox(
                 width: itemWidth,
@@ -822,22 +1006,36 @@ class _SectionSummary extends StatelessWidget {
                       )
                     else if (hasError)
                       IconButton(
-                        tooltip: 'Retry loading count',
+                        tooltip: 'Retry loading information',
                         onPressed: isStudents
                             ? onRetry
-                            : onRetrySectionSummary,
+                            : (isSubjects || isTeachers)
+                                ? onRetrySectionSummary
+                                : onRetryMonitor,
                         icon: const Icon(
                           Icons.refresh_rounded,
                           color: Color(0xFF138A4B),
                         ),
                       )
                     else
-                      Text(
-                        isMonitor ? '—' : '${count ?? 0}',
-                        style: const TextStyle(
-                          color: Color(0xFF172B24),
-                          fontSize: 23,
-                          fontWeight: FontWeight.w800,
+                      SizedBox(
+                        height: 28,
+                        child: Center(
+                          child: Text(
+                            isMonitor
+                                ? (displayMonitorName ? monitorName! : 'Not assigned')
+                                : '${count ?? 0}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: displayMonitorName
+                                  ? const Color(0xFF138A4B)
+                                  : const Color(0xFF172B24),
+                              fontSize: isMonitor ? 12 : 23,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                       ),
                     const SizedBox(height: 4),

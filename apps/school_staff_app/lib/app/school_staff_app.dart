@@ -7,6 +7,7 @@ import '../features/auth/logic/staff_auth_controller.dart';
 import '../features/auth/ui/staff_login_screen.dart';
 import '../features/dashboard/ui/school_admin_dashboard_screen.dart';
 import '../features/dashboard/ui/staff_teacher_dashboard_screen.dart';
+import '../features/dashboard/ui/monitor_dashboard_screen.dart';
 
 class SchoolStaffApp extends StatelessWidget {
   const SchoolStaffApp({
@@ -83,9 +84,7 @@ class StaffAppEntryScreen extends ConsumerWidget {
         return const StaffTeacherDashboardScreen();
 
       case 'monitor':
-        return const StaffRolePlaceholderScreen(
-          role: 'monitor',
-        );
+        return const MonitorDashboardScreen();
 
       default:
         return const Scaffold(
