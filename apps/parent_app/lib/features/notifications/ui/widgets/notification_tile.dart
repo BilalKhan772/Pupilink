@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 class NotificationTile extends StatelessWidget {
@@ -13,60 +14,51 @@ class NotificationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title =
-        notification['title'] as String? ??
-            'Notification';
+        notification['title'] as String? ?? 'Notification';
 
+    // New announcements use "body".
+    // Keep "message" as a fallback for older notifications.
     final message =
+        notification['body'] as String? ??
         notification['message'] as String? ??
-            '';
+        '';
 
     final type = _getNotificationType();
 
-    final isRead =
-        notification['isRead'] == true;
+    final isRead = notification['isRead'] == true;
 
     return Card(
-      margin: const EdgeInsets.only(
-        bottom: 12,
-      ),
+      margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         onTap: onTap,
-        borderRadius:
-            BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding:
-              const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Row(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
                 radius: 24,
-                child: Icon(
-                  _getIcon(type),
-                ),
+                child: Icon(_getIcon(type)),
               ),
 
               const SizedBox(width: 14),
 
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Text(
                             title,
                             style: TextStyle(
                               fontSize: 17,
-                              fontWeight:
-                                  isRead
-                                      ? FontWeight.w600
-                                      : FontWeight.bold,
+                              fontWeight: isRead
+                                  ? FontWeight.w600
+                                  : FontWeight.bold,
                             ),
                           ),
                         ),
@@ -75,32 +67,30 @@ class NotificationTile extends StatelessWidget {
                           Container(
                             width: 10,
                             height: 10,
-                            margin:
-                                const EdgeInsets.only(
+                            margin: const EdgeInsets.only(
                               top: 5,
                               left: 8,
                             ),
-                            decoration:
-                                const BoxDecoration(
-                              shape:
-                                  BoxShape.circle,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.blue,
                             ),
                           ),
                       ],
                     ),
 
-                    const SizedBox(height: 6),
-
-                    Text(
-                      message,
-                      maxLines: 2,
-                      overflow:
-                          TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color:
-                            Colors.grey.shade700,
+                    // Show the message preview when available.
+                    if (message.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        message.trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                        ),
                       ),
-                    ),
+                    ],
 
                     const SizedBox(height: 8),
 
@@ -108,10 +98,8 @@ class NotificationTile extends StatelessWidget {
                       _getTypeLabel(type),
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight:
-                            FontWeight.w600,
-                        color:
-                            Colors.grey.shade600,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600,
                       ),
                     ),
                   ],
@@ -131,45 +119,31 @@ class NotificationTile extends StatelessWidget {
     );
   }
 
-  // --------------------------------
-  // Get notification type
-  // --------------------------------
+  // Get notification type.
   String _getNotificationType() {
     final directType =
-        notification['type'] as String? ??
-            '';
+        notification['type'] as String? ?? '';
 
     if (directType.trim().isNotEmpty &&
-        directType.toLowerCase() !=
-            'notification' &&
-        directType.toLowerCase() !=
-            'general') {
-      return directType
-          .trim()
-          .toLowerCase();
+        directType.toLowerCase() != 'notification' &&
+        directType.toLowerCase() != 'general') {
+      return directType.trim().toLowerCase();
     }
 
-    final rawData =
-        notification['data'];
+    final rawData = notification['data'];
 
     if (rawData is Map) {
-      final dataType =
-          rawData['notificationType'];
+      final dataType = rawData['notificationType'];
 
-      if (dataType is String &&
-          dataType.trim().isNotEmpty) {
-        return dataType
-            .trim()
-            .toLowerCase();
+      if (dataType is String && dataType.trim().isNotEmpty) {
+        return dataType.trim().toLowerCase();
       }
     }
 
     return 'general';
   }
 
-  // --------------------------------
-  // Notification icon
-  // --------------------------------
+  // Notification icon.
   IconData _getIcon(String type) {
     switch (type) {
       case 'homework':
@@ -199,9 +173,7 @@ class NotificationTile extends StatelessWidget {
     }
   }
 
-  // --------------------------------
-  // Notification type label
-  // --------------------------------
+  // Notification type label.
   String _getTypeLabel(String type) {
     switch (type) {
       case 'homework':

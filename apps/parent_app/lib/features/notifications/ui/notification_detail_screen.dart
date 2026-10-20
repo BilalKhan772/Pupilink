@@ -1,7 +1,7 @@
+
 import 'package:flutter/material.dart';
 
-class NotificationDetailScreen
-    extends StatelessWidget {
+class NotificationDetailScreen extends StatelessWidget {
   final Map<String, dynamic> notification;
 
   const NotificationDetailScreen({
@@ -11,32 +11,31 @@ class NotificationDetailScreen
 
   @override
   Widget build(BuildContext context) {
-    final title =
-        notification['title'] as String? ??
-            'Notification';
+    final title = notification['title'] as String? ?? 'Notification';
 
+    // New announcements use "body".
+    // "message" fallback keeps older notifications compatible.
     final message =
+        notification['body'] as String? ??
         notification['message'] as String? ??
-            '';
+        '';
 
-    final type =
-        notification['type'] as String? ??
-            'general';
+    final type = notification['type'] as String? ?? 'general';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Notification',
-        ),
+        title: const Text('Notification'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          CircleAvatar(
-            radius: 35,
-            child: Icon(
-              _getIcon(type),
-              size: 35,
+          Center(
+            child: CircleAvatar(
+              radius: 35,
+              child: Icon(
+                _getIcon(type),
+                size: 35,
+              ),
             ),
           ),
 
@@ -48,8 +47,7 @@ class NotificationDetailScreen
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 24,
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
@@ -59,11 +57,16 @@ class NotificationDetailScreen
           Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: Text(
-                message,
-                style: const TextStyle(
-                  fontSize: 17,
-                  height: 1.5,
+              child: SizedBox(
+                width: double.infinity,
+                child: Text(
+                  message.trim().isEmpty
+                      ? 'Is notification ke saath koi message available nahi hai.'
+                      : message,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    height: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -73,19 +76,14 @@ class NotificationDetailScreen
 
           Card(
             child: ListTile(
-              leading: const Icon(
-                Icons.category,
-              ),
+              leading: const Icon(Icons.category),
               title: const Text(
                 'Type',
                 style: TextStyle(
-                  fontWeight:
-                      FontWeight.bold,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              subtitle: Text(
-                _getTypeLabel(type),
-              ),
+              subtitle: Text(_getTypeLabel(type)),
             ),
           ),
         ],

@@ -1,8 +1,10 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/logic/staff_auth_controller.dart';
 import '../../classes/ui/screens/classes_screen.dart';
+import '../../notifications/ui/create_announcement_screen.dart';
 import '../../sections/ui/screens/sections_screen.dart';
 import '../../students/ui/screens/all_students_screen.dart';
 
@@ -74,6 +76,18 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
         title: 'Reports',
         subtitle: 'School progress reports',
         icon: Icons.bar_chart_rounded,
+      ),
+      _DashboardModule(
+        title: 'Notifications',
+        subtitle: 'Send school announcements',
+        icon: Icons.notifications_active_outlined,
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const CreateAnnouncementScreen(),
+            ),
+          );
+        },
       ),
     ];
 
