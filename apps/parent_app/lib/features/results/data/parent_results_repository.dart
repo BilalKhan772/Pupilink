@@ -1,3 +1,4 @@
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ParentResultsRepository {
@@ -5,16 +6,13 @@ class ParentResultsRepository {
 
   ParentResultsRepository({
     FirebaseFirestore? firestore,
-  }) : firestore =
-            firestore ?? FirebaseFirestore.instance;
+  }) : firestore = firestore ?? FirebaseFirestore.instance;
 
   Future<List<Map<String, dynamic>>> getResults({
     required String studentId,
   }) async {
     if (studentId.isEmpty) {
-      throw Exception(
-        'Student ID available nahi hai.',
-      );
+      throw Exception('Student ID available nahi hai.');
     }
 
     final snapshot = await firestore
@@ -23,10 +21,14 @@ class ParentResultsRepository {
           'studentId',
           isEqualTo: studentId,
         )
+        .where(
+          'expiresAt',
+          isGreaterThan: Timestamp.now(),
+        )
+        .orderBy('expiresAt')
         .get();
 
-    final records =
-        snapshot.docs.map((document) {
+    final records = snapshot.docs.map((document) {
       return {
         'id': document.id,
         ...document.data(),

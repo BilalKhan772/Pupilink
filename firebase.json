@@ -1,54 +1,58 @@
+
 {
-    "flutter": {
-        "platforms": {
-            "android": {
-                "default": {
-                    "projectId": "pupilink",
-                    "appId": "1:1020394497792:android:c6d0fc028b7c024c9f35e5",
-                    "fileOutput": "android/app/google-services.json"
-                }
-            },
-            "dart": {
-                "lib/firebase_options.dart": {
-                    "projectId": "pupilink",
-                    "configurations": {
-                        "android": "1:1020394497792:android:c6d0fc028b7c024c9f35e5",
-                        "ios": "1:1020394497792:ios:697951631d0fb1529f35e5",
-                        "macos": "1:1020394497792:ios:697951631d0fb1529f35e5",
-                        "web": "1:1020394497792:web:857c56c63b2f1be49f35e5",
-                        "windows": "1:1020394497792:web:4d085c0b9e770c879f35e5"
-                    }
-                }
-            }
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "pupilink",
+          "appId": "1:1020394497792:android:c6d0fc028b7c024c9f35e5",
+          "fileOutput": "android/app/google-services.json"
         }
-    },
-    "functions": {
-        "source": "firebase/functions",
-        "runtime": "nodejs24",
-        "predeploy": [
-            "npm --prefix \"$RESOURCE_DIR\" run build"
-        ]
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "pupilink",
+          "configurations": {
+            "android": "1:1020394497792:android:c6d0fc028b7c024c9f35e5",
+            "ios": "1:1020394497792:ios:697951631d0fb1529f35e5",
+            "macos": "1:1020394497792:ios:697951631d0fb1529f35e5",
+            "web": "1:1020394497792:web:857c56c63b2f1be49f35e5",
+            "windows": "1:1020394497792:web:4d085c0b9e770c879f35e5"
+          }
+        }
+      }
+    }
+  },
+  "functions": {
+    "source": "firebase/functions",
+    "runtime": "nodejs24",
+    "predeploy": [
+      "npm --prefix \"$RESOURCE_DIR\" run build"
+    ]
+  },
+  "firestore": {
+    "rules": "firebase/firestore.rules"
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
     },
     "firestore": {
-        "rules": "firebase/firestore.rules"
+      "port": 8080
     },
-    "emulators": {
-        "auth": {
-            "port": 9099
-        },
-        "firestore": {
-            "port": 8080
-        },
-        "functions": {
-            "port": 5001
-        },
-        "storage": {
-            "port": 9199
-        },
-        "ui": {
-            "enabled": true,
-            "port": 4000
-        },
-        "singleProjectMode": true
-    }
+    "functions": {
+      "port": 5001
+    },
+    "pubsub": {
+      "port": 8085
+    },
+    "storage": {
+      "port": 9199
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4000
+    },
+    "singleProjectMode": true
+  }
 }

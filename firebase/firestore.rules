@@ -707,5 +707,21 @@ service cloud.firestore {
         if isSchoolAdmin()
         && resource.data.schoolId == userData().schoolId;
     }
+     
+    // ============================
+    // PARENT TEST RESULTS
+    // ============================
+
+    match /results/{resultId} {
+      allow read:
+        if isParent()
+        && resource.data.studentId is string
+        && isParentLinkedToStudent(resource.data.studentId)
+        && resource.data.expiresAt is timestamp
+        && resource.data.expiresAt > request.time;
+
+      // Results are published and deleted by trusted backend functions.
+      allow create, update, delete: if false;
+    }
   }
 }

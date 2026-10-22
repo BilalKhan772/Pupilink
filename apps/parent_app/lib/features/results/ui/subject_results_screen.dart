@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 class SubjectResultsScreen extends StatelessWidget {
@@ -16,11 +17,8 @@ class SubjectResultsScreen extends StatelessWidget {
     int totalMarks = 0;
 
     for (final result in results) {
-      final obtained =
-          result['obtainedMarks'] as num? ?? 0;
-
-      final total =
-          result['totalMarks'] as num? ?? 0;
+      final obtained = result['obtainedMarks'] as num? ?? 0;
+      final total = result['totalMarks'] as num? ?? 0;
 
       totalObtained += obtained.toInt();
       totalMarks += total.toInt();
@@ -42,9 +40,7 @@ class SubjectResultsScreen extends StatelessWidget {
             totalMarks: totalMarks,
             percentage: percentage,
           ),
-
           const SizedBox(height: 25),
-
           const Text(
             'Test Results',
             style: TextStyle(
@@ -52,16 +48,13 @@ class SubjectResultsScreen extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-
           const SizedBox(height: 12),
-
           if (results.isEmpty)
             _emptyResults()
           else
             ...results.map(
               (result) => Padding(
-                padding:
-                    const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.only(bottom: 12),
                 child: _resultCard(result),
               ),
             ),
@@ -87,9 +80,7 @@ class SubjectResultsScreen extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 15),
-
             Text(
               '$totalObtained / $totalMarks',
               style: const TextStyle(
@@ -97,9 +88,7 @@ class SubjectResultsScreen extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 8),
-
             Text(
               '${percentage.toStringAsFixed(1)}%',
               style: const TextStyle(
@@ -107,9 +96,7 @@ class SubjectResultsScreen extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 8),
-
             Text(
               'Grade: ${_calculateGrade(percentage)}',
               style: const TextStyle(
@@ -123,33 +110,29 @@ class SubjectResultsScreen extends StatelessWidget {
     );
   }
 
-  Widget _resultCard(
-    Map<String, dynamic> result,
-  ) {
+  Widget _resultCard(Map<String, dynamic> result) {
     final testName =
         result['testName'] as String? ??
-            result['examName'] as String? ??
-            'Test';
+        result['examName'] as String? ??
+        'Test';
 
-    final obtained =
-        result['obtainedMarks'] as num? ?? 0;
+    final obtained = result['obtainedMarks'] as num? ?? 0;
+    final total = result['totalMarks'] as num? ?? 0;
 
-    final total =
-        result['totalMarks'] as num? ?? 0;
+    final rawDate = result['date'];
+    final formattedDate = _formatDate(rawDate);
 
-    final date =
-        result['date'] as String? ?? '';
-
-    final percentage = total == 0
-        ? 0.0
-        : (obtained / total) * 100;
+    final percentage =
+        total == 0 ? 0.0 : (obtained / total) * 100;
 
     return Card(
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 8,
+        ),
         leading: const CircleAvatar(
-          child: Icon(
-            Icons.assignment,
-          ),
+          child: Icon(Icons.assignment),
         ),
         title: Text(
           testName,
@@ -157,14 +140,72 @@ class SubjectResultsScreen extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        subtitle: Text(
-          '${obtained.toInt()} / ${total.toInt()}'
-          ' • '
-          '${percentage.toStringAsFixed(1)}%'
-          '${date.isEmpty ? '' : '\n$date'}',
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 5),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${obtained.toInt()} / ${total.toInt()}'
+                ' • ${percentage.toStringAsFixed(1)}%',
+              ),
+              if (formattedDate.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today_outlined,
+                      size: 13,
+                      color: Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        formattedDate,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  String _formatDate(dynamic value) {
+    if (value == null) return '';
+
+    DateTime? dateTime;
+
+    if (value is DateTime) {
+      dateTime = value;
+    } else if (value is String) {
+      dateTime = DateTime.tryParse(value);
+    } else if (value is int) {
+      dateTime = DateTime.fromMillisecondsSinceEpoch(value);
+    }
+
+    if (dateTime == null) return '';
+
+    // Device ki local timezone mein date show hogi.
+    final localDate = dateTime.toLocal();
+
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+
+    final day = localDate.day.toString().padLeft(2, '0');
+    final month = months[localDate.month - 1];
+    final year = localDate.year;
+
+    return '$day $month $year';
   }
 
   Widget _emptyResults() {
@@ -177,9 +218,7 @@ class SubjectResultsScreen extends StatelessWidget {
               Icons.assignment,
               size: 60,
             ),
-
             SizedBox(height: 12),
-
             Text(
               'No Test Results',
               style: TextStyle(
@@ -187,12 +226,9 @@ class SubjectResultsScreen extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             SizedBox(height: 8),
-
             Text(
-              'Is subject ke test results '
-              'abhi available nahi hain.',
+              'Is subject ke test results abhi available nahi hain.',
               textAlign: TextAlign.center,
             ),
           ],
@@ -201,29 +237,12 @@ class SubjectResultsScreen extends StatelessWidget {
     );
   }
 
-  String _calculateGrade(
-    double percentage,
-  ) {
-    if (percentage >= 90) {
-      return 'A+';
-    }
-
-    if (percentage >= 80) {
-      return 'A';
-    }
-
-    if (percentage >= 70) {
-      return 'B';
-    }
-
-    if (percentage >= 60) {
-      return 'C';
-    }
-
-    if (percentage >= 50) {
-      return 'D';
-    }
-
+  String _calculateGrade(double percentage) {
+    if (percentage >= 90) return 'A+';
+    if (percentage >= 80) return 'A';
+    if (percentage >= 70) return 'B';
+    if (percentage >= 60) return 'C';
+    if (percentage >= 50) return 'D';
     return 'F';
   }
 }
