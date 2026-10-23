@@ -21,17 +21,26 @@ class TestResultsScreen extends ConsumerStatefulWidget {
 
 class _TestResultsScreenState
     extends ConsumerState<TestResultsScreen> {
+  String get _studentId =>
+      widget.child['studentId'] as String? ?? '';
+
+  String get _schoolId =>
+      widget.child['schoolId'] as String? ?? '';
+
   @override
   void initState() {
     super.initState();
 
-    Future.microtask(() {
-      ref
-          .read(parentResultsControllerProvider.notifier)
-          .loadResults(
-            studentId: widget.child['studentId'] as String? ?? '',
-          );
-    });
+    Future.microtask(_loadResults);
+  }
+
+  Future<void> _loadResults() async {
+    await ref
+        .read(parentResultsControllerProvider.notifier)
+        .loadResults(
+          studentId: _studentId,
+          schoolId: _schoolId,
+        );
   }
 
   @override
@@ -41,7 +50,46 @@ class _TestResultsScreenState
     final studentName =
         widget.child['name'] as String? ?? 'Student';
 
+    // Temporary test records grouped by subject.
     final groupedResults = _groupResultsBySubject(state.records);
+
+    // Permanent subject summaries are the source of truth for averages.
+    final permanentSubjects = state.subjectAverages;
+
+    // Match temporary tests to their permanent subject summary.
+    final displayedSubjects = <String, Map<String, dynamic>>{};
+
+    for (final average in permanentSubjects) {
+      final subject = _subjectName(average);
+      displayedSubjects[subject] = {
+        'average': average,
+        'results': groupedResults[subject] ?? <Map<String, dynamic>>[],
+      };
+    }
+
+    // Also display subjects that have temporary results but no saved average.
+    for (final entry in groupedResults.entries) {
+      displayedSubjects.putIfAbsent(entry.key, () {
+        final results = entry.value;
+        final obtained = _totalObtained(results);
+        final possible = _totalPossible(results);
+
+        return {
+          'average': {
+            'obtainedMarks': obtained,
+            'totalMarks': possible,
+            'percentage': possible == 0
+                ? 0.0
+                : obtained / possible * 100,
+            'testCount': results.length,
+          },
+          'results': results,
+        };
+      });
+    }
+
+    final hasAnySummary =
+        permanentSubjects.isNotEmpty || state.studentAverage != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -50,15 +98,9 @@ class _TestResultsScreenState
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: () {
-                return ref
-                    .read(parentResultsControllerProvider.notifier)
-                    .loadResults(
-                      studentId:
-                          widget.child['studentId'] as String? ?? '',
-                    );
-              },
+              onRefresh: _loadResults,
               child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 children: [
                   Text(
@@ -87,10 +129,13 @@ class _TestResultsScreenState
                       ),
                     ),
 
-                  if (state.records.isEmpty)
-                    _emptyResults()
-                  else ...[
-                    _summaryCard(state),
+                  if (state.studentAverage != null ||
+                      state.records.isNotEmpty)
+                    _summaryCard(state)
+                  else if (!hasAnySummary)
+                    _emptyResults(),
+
+                  if (displayedSubjects.isNotEmpty) ...[
                     const SizedBox(height: 24),
                     const Text(
                       'Subject Performance',
@@ -101,13 +146,25 @@ class _TestResultsScreenState
                     ),
                     const SizedBox(height: 12),
 
-                    ...groupedResults.entries.map((entry) {
-                      final results = entry.value;
-                      final totalObtained = _totalObtained(results);
-                      final totalPossible = _totalPossible(results);
-                      final percentage = totalPossible == 0
-                          ? 0.0
-                          : (totalObtained / totalPossible) * 100;
+                    ...displayedSubjects.entries.map((entry) {
+                      final summary = entry.value['average']
+                          as Map<String, dynamic>;
+                      final results = entry.value['results']
+                          as List<Map<String, dynamic>>;
+
+                      final totalObtained =
+                          _number(summary['obtainedMarks']);
+                      final totalPossible =
+                          _number(summary['totalMarks']);
+
+                      final percentageValue = summary['percentage'];
+                      final percentage = percentageValue is num
+                          ? percentageValue.toDouble()
+                          : (totalPossible == 0
+                              ? 0.0
+                              : totalObtained /
+                                  totalPossible *
+                                  100);
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
@@ -117,14 +174,45 @@ class _TestResultsScreenState
                           totalObtained: totalObtained,
                           totalPossible: totalPossible,
                           percentage: percentage,
+                          testCount: _number(
+                            summary['testCount'],
+                            fallback: results.length,
+                          ),
                         ),
                       );
                     }),
+                  ],
+
+                  if (state.records.isEmpty &&
+                      (state.studentAverage != null ||
+                          permanentSubjects.isNotEmpty)) ...[
+                    const SizedBox(height: 12),
+                    const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(14),
+                        child: Text(
+                          'Purane individual test results expire ho chuke '
+                          'hain. Saved subject aur overall averages yahan '
+                          'available reh sakte hain.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
                   ],
                 ],
               ),
             ),
     );
+  }
+
+  String _subjectName(Map<String, dynamic> record) {
+    for (final key in ['subject', 'subjectName', 'subjectId']) {
+      final value = record[key];
+      if (value is String && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+    return 'Subject';
   }
 
   Map<String, List<Map<String, dynamic>>> _groupResultsBySubject(
@@ -133,12 +221,7 @@ class _TestResultsScreenState
     final grouped = <String, List<Map<String, dynamic>>>{};
 
     for (final record in records) {
-      final subjectValue = record['subject'];
-      final subject = subjectValue is String &&
-              subjectValue.trim().isNotEmpty
-          ? subjectValue.trim()
-          : 'Subject';
-
+      final subject = _subjectName(record);
       grouped.putIfAbsent(subject, () => []).add(record);
     }
 
@@ -152,17 +235,19 @@ class _TestResultsScreenState
     };
   }
 
+  int _number(dynamic value, {int fallback = 0}) {
+    return value is num ? value.toInt() : fallback;
+  }
+
   int _totalObtained(List<Map<String, dynamic>> results) {
     return results.fold<int>(0, (sum, result) {
-      final value = result['obtainedMarks'];
-      return sum + (value is num ? value.toInt() : 0);
+      return sum + _number(result['obtainedMarks']);
     });
   }
 
   int _totalPossible(List<Map<String, dynamic>> results) {
     return results.fold<int>(0, (sum, result) {
-      final value = result['totalMarks'];
-      return sum + (value is num ? value.toInt() : 0);
+      return sum + _number(result['totalMarks']);
     });
   }
 
@@ -205,7 +290,7 @@ class _TestResultsScreenState
             ),
             const SizedBox(height: 6),
             Text(
-              'Tests: ${state.records.length}',
+              'Unexpired tests: ${state.records.length}',
               style: TextStyle(color: Colors.grey.shade700),
             ),
           ],
@@ -220,6 +305,7 @@ class _TestResultsScreenState
     required int totalObtained,
     required int totalPossible,
     required double percentage,
+    required int testCount,
   }) {
     final progress = (percentage / 100).clamp(0.0, 1.0);
 
@@ -262,7 +348,7 @@ class _TestResultsScreenState
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${results.length} ${results.length == 1 ? 'test' : 'tests'}'
+                      '$testCount ${testCount == 1 ? 'test' : 'tests'}'
                       '  •  $totalObtained / $totalPossible marks',
                       style: TextStyle(
                         fontSize: 12,
@@ -275,7 +361,8 @@ class _TestResultsScreenState
                       child: LinearProgressIndicator(
                         value: progress,
                         minHeight: 7,
-                        backgroundColor: Colors.green.withValues(alpha: 0.12),
+                        backgroundColor:
+                            Colors.green.withValues(alpha: 0.12),
                         valueColor: const AlwaysStoppedAnimation<Color>(
                           Colors.green,
                         ),
@@ -327,7 +414,7 @@ class _TestResultsScreenState
             ),
             SizedBox(height: 8),
             Text(
-              'Abhi is child ke results available nahi hain.',
+              'Abhi is child ke results ya saved averages available nahi hain.',
               textAlign: TextAlign.center,
             ),
           ],
