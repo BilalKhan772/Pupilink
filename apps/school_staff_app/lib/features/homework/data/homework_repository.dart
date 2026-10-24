@@ -3,9 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-final homeworkRepositoryProvider = Provider<HomeworkRepository>((ref) {
-  return HomeworkRepository();
-});
+final homeworkRepositoryProvider =
+    Provider<HomeworkRepository>((ref) => HomeworkRepository());
 
 class HomeworkRepository {
   HomeworkRepository({
@@ -86,28 +85,63 @@ class HomeworkRepository {
         .where('sectionId', isEqualTo: sectionId)
         .get();
 
-    final records = snapshot.docs.map((document) {
-      return <String, dynamic>{
-        'id': document.id,
-        ...document.data(),
-      };
-    }).toList();
+    final now = DateTime.now();
 
+    final records = snapshot.docs
+        .map(
+          (document) => <String, dynamic>{
+            'id': document.id,
+            ...document.data(),
+          },
+        )
+        .where((record) {
+          final assignedAt = _dateValue(record['assignedAt']);
+
+          // Missing upload date wale records ko list mein na dikhayein.
+          if (assignedAt == null) return false;
+
+          final localAssignedAt = assignedAt.toLocal();
+
+          // Upload date ke 2 calendar days baad raat 12 baje expiry.
+          final expiryDate = DateTime(
+            localAssignedAt.year,
+            localAssignedAt.month,
+            localAssignedAt.day + 2,
+          );
+
+          return now.isBefore(expiryDate);
+        })
+        .toList();
+
+    // Latest uploaded homework sab se upar.
     records.sort((a, b) {
-      return _dateValue(b['assignedAt'])
-          .compareTo(_dateValue(a['assignedAt']));
+      final dateA = _dateValue(a['assignedAt']);
+      final dateB = _dateValue(b['assignedAt']);
+
+      if (dateA == null && dateB == null) return 0;
+      if (dateA == null) return 1;
+      if (dateB == null) return -1;
+
+      return dateB.compareTo(dateA);
     });
 
     return records;
   }
 
-  DateTime _dateValue(dynamic value) {
-    if (value is Timestamp) return value.toDate();
-    if (value is DateTime) return value;
-    if (value is String) {
-      return DateTime.tryParse(value) ?? DateTime(2000);
+  DateTime? _dateValue(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
     }
-    return DateTime(2000);
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+
+    return null;
   }
 
   Future<int> publishHomework({
@@ -130,7 +164,8 @@ class HomeworkRepository {
 
     if (studentsSnapshot.docs.isEmpty) {
       throw Exception(
-        'Is section mein koi student nahi mila. Students ke documents mein schoolId aur sectionId verify karein.',
+        'Is section mein koi student nahi mila. '
+        'Students ke documents mein schoolId aur sectionId verify karein.',
       );
     }
 
@@ -142,9 +177,8 @@ class HomeworkRepository {
     final students = studentsSnapshot.docs;
 
     for (var start = 0; start < students.length; start += 450) {
-      final end = start + 450 < students.length
-          ? start + 450
-          : students.length;
+      final end =
+          start + 450 < students.length ? start + 450 : students.length;
 
       final batch = _firestore.batch();
 
@@ -156,11 +190,7 @@ class HomeworkRepository {
           'classId': classId,
           'sectionId': sectionId,
           'studentId': student.id,
-
-          // UI se subject hata diya hai.
-          // Yeh hidden default purane Firestore rules ke liye hai.
           'subject': 'Homework',
-
           'title': title.trim(),
           'description': description.trim(),
           'attachmentUrl': null,
