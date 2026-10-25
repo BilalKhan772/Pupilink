@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -129,8 +128,6 @@ service cloud.firestore {
     // MONITOR ASSIGNMENT HELPER
     // ============================
 
-    // A monitor must still be assigned to the section
-    // in the actual section document.
     function monitorAssignedToSection(sectionId, schoolId) {
       return isSchoolStaff()
         && userData().role == 'monitor'
@@ -707,12 +704,59 @@ service cloud.firestore {
         if isSchoolAdmin()
         && resource.data.schoolId == userData().schoolId;
     }
-     
+
+    // ============================
+    // ATTENDANCE RECORDS
+    // ============================
+
+    match /attendanceRecords/{recordId} {
+
+      // Parents can read records only for approved linked students.
+      allow get, list:
+        if isParent()
+        && resource.data.studentId is string
+        && isParentLinkedToStudent(resource.data.studentId);
+
+      // School staff can read records from their own school.
+      allow get, list:
+        if isSchoolStaff()
+        && resource.data.schoolId == userData().schoolId;
+
+      // Writes remain controlled by trusted backend code
+      // or separately configured rules.
+      allow create, update, delete: if false;
+    }
+
+    // ============================
+    // ATTENDANCE SESSIONS
+    // ============================
+
+    match /attendanceSessions/{sessionId} {
+
+      // School staff can read sessions from their own school.
+      allow get, list:
+        if isSchoolStaff()
+        && resource.data.schoolId == userData().schoolId;
+
+      // Parent session access requires studentId in the session document.
+      // The current Staff App session schema does not include studentId,
+      // so parent attendance should be loaded from attendanceRecords.
+      allow get, list:
+        if isParent()
+        && resource.data.studentId is string
+        && isParentLinkedToStudent(resource.data.studentId);
+
+      // Writes remain controlled by trusted backend code
+      // or separately configured rules.
+      allow create, update, delete: if false;
+    }
+
     // ============================
     // PARENT TEST RESULTS
     // ============================
 
     match /results/{resultId} {
+
       allow read:
         if isParent()
         && resource.data.studentId is string

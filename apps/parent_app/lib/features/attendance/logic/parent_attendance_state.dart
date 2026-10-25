@@ -16,13 +16,9 @@ class ParentAttendanceState {
     bool clearError = false,
   }) {
     return ParentAttendanceState(
-      isLoading:
-          isLoading ?? this.isLoading,
-      records:
-          records ?? this.records,
-      error: clearError
-          ? null
-          : (error ?? this.error),
+      isLoading: isLoading ?? this.isLoading,
+      records: records ?? this.records,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 
@@ -53,8 +49,6 @@ class ParentAttendanceState {
       return 0;
     }
 
-    return ((presentCount + lateCount) /
-            totalCount) *
-        100;
+    return ((presentCount + lateCount) / totalCount) * 100;
   }
 }

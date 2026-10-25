@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/parent_attendance_repository.dart';
 import 'parent_attendance_state.dart';
+import 'package:flutter/foundation.dart';
 
 final parentAttendanceRepositoryProvider =
     Provider<ParentAttendanceRepository>((ref) {
@@ -14,9 +15,7 @@ final parentAttendanceControllerProvider =
         ParentAttendanceState>(
   (ref) {
     return ParentAttendanceController(
-      ref.read(
-        parentAttendanceRepositoryProvider,
-      ),
+      ref.read(parentAttendanceRepositoryProvider),
     );
   },
 );
@@ -25,11 +24,8 @@ class ParentAttendanceController
     extends StateNotifier<ParentAttendanceState> {
   final ParentAttendanceRepository repository;
 
-  ParentAttendanceController(
-    this.repository,
-  ) : super(
-          const ParentAttendanceState(),
-        );
+  ParentAttendanceController(this.repository)
+      : super(const ParentAttendanceState());
 
   Future<void> loadAttendance({
     required String studentId,
@@ -40,8 +36,7 @@ class ParentAttendanceController
     );
 
     try {
-      final records =
-          await repository.getAttendance(
+      final records = await repository.getAttendance(
         studentId: studentId,
       );
 
@@ -50,11 +45,15 @@ class ParentAttendanceController
         records: records,
         clearError: true,
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
+      // Error ko debug console mein bhi show karein.
+      debugPrint('Attendance load error: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
       state = state.copyWith(
         isLoading: false,
-        error:
-            'Attendance load nahi ho saki.',
+        error: 'Attendance load nahi ho saki. '
+            'Internet aur Firestore permissions check karein.',
       );
     }
   }
