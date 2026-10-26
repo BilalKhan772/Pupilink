@@ -23,13 +23,21 @@ export const publishStudentResult = onDocumentWritten(
   "studentMarks/{markId}",
   async (event) => {
     const after = event.data?.after;
+    const before = event.data?.before;
 
-    // Document delete hua ho ya event data available na ho.
     if (!after || !after.exists) {
+      // Mark document delete hone par temporary result remove karein.
+      await db
+        .collection("results")
+        .doc(event.params.markId)
+        .delete()
+        .catch((error) => {
+          console.error("Unable to delete temporary result.", error);
+        });
+
       return;
     }
 
-    // TypeScript safety: data missing ho to function stop kare.
     const mark = after.data();
 
     if (!mark) {
@@ -40,6 +48,21 @@ export const publishStudentResult = onDocumentWritten(
     }
 
     const markId = event.params.markId;
+    const resultRef = db.collection("results").doc(markId);
+
+    // Draft marks ko Parent App mein publish na karein.
+    if (mark.status !== "published") {
+      if (before?.exists) {
+        await resultRef.delete().catch((error) => {
+          console.error("Unable to remove unpublished result.", {
+            markId,
+            error,
+          });
+        });
+      }
+
+      return;
+    }
 
     const studentId = mark.studentId;
     const examId = mark.examId;
@@ -64,13 +87,10 @@ export const publishStudentResult = onDocumentWritten(
       obtainedMarks < 0 ||
       obtainedMarks > totalMarks
     ) {
-      console.error("Invalid student mark; result not published.", {
-        markId,
-      });
+      console.error("Invalid published student mark.", { markId });
       return;
     }
 
-    const resultRef = db.collection("results").doc(markId);
     const testRef = db.collection("tests").doc(examId);
 
     const [testSnapshot, existingResult] = await Promise.all([
@@ -79,32 +99,23 @@ export const publishStudentResult = onDocumentWritten(
     ]);
 
     if (!testSnapshot.exists) {
-      console.error("Test document not found.", {
-        examId,
-        markId,
-      });
+      console.error("Test document not found.", { examId, markId });
       return;
     }
 
     const test = testSnapshot.data();
 
     if (!test) {
-      console.error("Test data is missing.", {
-        examId,
-        markId,
-      });
+      console.error("Test data is missing.", { examId, markId });
       return;
     }
 
-    // Ensure the mark belongs to the same school, section and subject.
     if (
       test.schoolId !== schoolId ||
       test.sectionId !== mark.sectionId ||
       test.subjectId !== subjectId
     ) {
-      console.error("Test and mark data do not match.", {
-        markId,
-      });
+      console.error("Test and mark data do not match.", { markId });
       return;
     }
 
@@ -117,7 +128,6 @@ export const publishStudentResult = onDocumentWritten(
       previousExpiry instanceof Timestamp &&
       previousExpiry.toMillis() <= now.toMillis();
 
-    // Updating an unexpired result does not extend its expiry.
     const publishedAt =
       previous?.publishedAt instanceof Timestamp && !wasExpired
         ? previous.publishedAt
@@ -163,9 +173,7 @@ export const publishStudentResult = onDocumentWritten(
     await resultRef.set(
       {
         ...result,
-        ...(existingResult.exists
-          ? {}
-          : { createdAt: now }),
+        ...(existingResult.exists ? {} : { createdAt: now }),
       },
       { merge: true },
     );

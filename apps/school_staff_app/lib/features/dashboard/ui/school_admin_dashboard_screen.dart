@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/logic/staff_auth_controller.dart';
 import '../../classes/ui/screens/classes_screen.dart';
 import '../../notifications/ui/create_announcement_screen.dart';
+import '../../reports/ui/reports_dashboard_screen.dart';
 import '../../sections/ui/screens/sections_screen.dart';
 import '../../students/ui/screens/all_students_screen.dart';
 
@@ -76,6 +77,26 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
         title: 'Reports',
         subtitle: 'School progress reports',
         icon: Icons.bar_chart_rounded,
+        onTap: () {
+          if (auth.schoolId.trim().isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'School ID available nahi hai. Dobara login karein.',
+                ),
+              ),
+            );
+            return;
+          }
+
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => ReportsDashboardScreen(
+                schoolId: auth.schoolId,
+              ),
+            ),
+          );
+        },
       ),
       _DashboardModule(
         title: 'Notifications',
@@ -140,12 +161,10 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
                   Text(
                     'Welcome, '
                     '${auth.name.isEmpty ? 'School Admin' : auth.name}',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineMedium
-                        ?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style:
+                        Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -211,8 +230,7 @@ class SchoolAdminDashboardScreen extends ConsumerWidget {
                               child: Padding(
                                 padding: const EdgeInsets.all(18),
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Icon(
                                       module.icon,

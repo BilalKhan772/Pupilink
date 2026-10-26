@@ -113,7 +113,9 @@ class SubjectTeacherWorkRepository {
     if (assignment.sectionId == null ||
         assignment.sectionId!.trim().isEmpty ||
         (assignment.subjectId ?? '').trim().isEmpty) {
-      throw ArgumentError('Assignment mein subject ya section missing hai.');
+      throw ArgumentError(
+        'Assignment mein subject ya section missing hai.',
+      );
     }
 
     if (totalMarks <= 0 ||
@@ -231,7 +233,10 @@ class SubjectTeacherWorkRepository {
         academicYearId: test.academicYearId,
         obtainedMarks: value,
         totalMarks: test.totalMarks,
-        status: 'draft',
+
+        // UPDATED: Teacher ke Save & Upload par result publish hoga.
+        status: 'published',
+
         enteredBy: teacherId,
       );
 
