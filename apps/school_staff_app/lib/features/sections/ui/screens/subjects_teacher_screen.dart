@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:school_models/school_models.dart';
 
@@ -17,14 +16,16 @@ class SubjectsTeacherScreen extends StatefulWidget {
   final SubjectsTeacherRepository repository;
 
   @override
-  State<SubjectsTeacherScreen> createState() =>
-      _SubjectsTeacherScreenState();
+  State<SubjectsTeacherScreen> createState() => _SubjectsTeacherScreenState();
 }
 
 class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
   static const Color _green = Color(0xFF138A4B);
   static const Color _darkGreen = Color(0xFF105C3B);
-  static const Color _background = Color(0xFFF7F9F7);
+  static const Color _background = Color(0xFFF5F8F6);
+  static const Color _border = Color(0xFFE2EAE5);
+  static const Color _text = Color(0xFF1F2937);
+  static const Color _muted = Color(0xFF6B7280);
 
   List<Subject> _subjects = [];
   List<StaffMember> _teachers = [];
@@ -73,10 +74,25 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
       if (!mounted) return;
 
       setState(() {
-        _error = e.toString();
+        _error = _friendlyError(e);
         _loading = false;
       });
     }
+  }
+
+  String _friendlyError(Object error) {
+    final message = error.toString();
+
+    if (message.contains('permission-denied')) {
+      return 'You do not have permission to access this information.';
+    }
+    if (message.contains('unavailable')) {
+      return 'The service is temporarily unavailable. Please try again.';
+    }
+    if (message.contains('network')) {
+      return 'Please check your internet connection and try again.';
+    }
+    return message;
   }
 
   StaffMember? _teacherFor(String subjectId) {
@@ -86,12 +102,9 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
       }
 
       for (final teacher in _teachers) {
-        if (teacher.id == assignment.teacherId) {
-          return teacher;
-        }
+        if (teacher.id == assignment.teacherId) return teacher;
       }
     }
-
     return null;
   }
 
@@ -103,59 +116,72 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Add Section Subject'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.menu_book_rounded, color: _green),
+              SizedBox(width: 10),
+              Expanded(child: Text('Add Subject')),
+            ],
+          ),
           content: SizedBox(
-            width: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Subject name *',
-                    hintText: 'e.g. Mathematics',
-                    border: OutlineInputBorder(),
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: _inputDecoration(
+                      label: 'Subject Name',
+                      hint: 'e.g. Mathematics',
+                      icon: Icons.menu_book_outlined,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: codeController,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    labelText: 'Subject code (optional)',
-                    hintText: 'e.g. MATH',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: codeController,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: _inputDecoration(
+                      label: 'Subject Code (Optional)',
+                      hint: 'e.g. MATH',
+                      icon: Icons.tag_rounded,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Yeh subject sirf selected section ke liye create hoga.',
-                  style: TextStyle(color: Colors.black54),
-                ),
-              ],
+                  const SizedBox(height: 14),
+                  const _InformationNote(
+                    message:
+                        'This subject will be available in the selected section only.',
+                  ),
+                ],
+              ),
             ),
           ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Cancel'),
             ),
-            FilledButton(
+            FilledButton.icon(
+              style: _primaryButtonStyle(),
               onPressed: () {
                 if (nameController.text.trim().isNotEmpty) {
                   Navigator.pop(dialogContext, true);
                 }
               },
-              child: const Text('Save Subject'),
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('Save Subject'),
             ),
           ],
         ),
       );
 
       if (confirmed != true || !mounted) return;
-
       setState(() => _saving = true);
 
       await widget.repository.addSubject(
@@ -166,18 +192,122 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
       );
 
       await _load();
-
       if (mounted) {
-        _message('Subject is section mein successfully add ho gaya.');
+        _message('Subject added successfully.', isSuccess: true);
       }
     } catch (e) {
       if (mounted) {
-        _message('Subject save nahi hua: $e');
+        _message('Unable to save the subject: ${_friendlyError(e)}');
       }
     } finally {
       nameController.dispose();
       codeController.dispose();
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
+  // ------------------------------------------------------------
+  // EDIT SUBJECT
+  // ------------------------------------------------------------
+
+  Future<void> _editSubject(Subject subject) async {
+    final nameController = TextEditingController(text: subject.name);
+    final codeController = TextEditingController(text: subject.code ?? '');
+
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.edit_outlined, color: _green),
+              SizedBox(width: 10),
+              Expanded(child: Text('Edit Subject')),
+            ],
+          ),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: _inputDecoration(
+                      label: 'Subject Name',
+                      hint: 'e.g. Mathematics',
+                      icon: Icons.menu_book_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: codeController,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: _inputDecoration(
+                      label: 'Subject Code (Optional)',
+                      hint: 'e.g. MATH',
+                      icon: Icons.tag_rounded,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const _InformationNote(
+                    message:
+                        'Only the subject name and code will be updated. '
+                        'Existing teacher assignments will be preserved.',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              style: _primaryButtonStyle(),
+              onPressed: () {
+                if (nameController.text.trim().isNotEmpty) {
+                  Navigator.pop(dialogContext, true);
+                }
+              },
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('Save Changes'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true || !mounted) return;
+
+      setState(() => _saving = true);
+
+      await widget.repository.updateSubject(
+        schoolId: widget.section.schoolId,
+        sectionId: widget.section.id,
+        subjectId: subject.id,
+        name: nameController.text,
+        code: codeController.text,
+      );
+
+      await _load();
+
+      if (mounted) {
+        _message('Subject updated successfully.', isSuccess: true);
+      }
+    } catch (e) {
+      if (mounted) {
+        _message('Unable to update the subject: ${_friendlyError(e)}');
+      }
+    } finally {
+      nameController.dispose();
+      codeController.dispose();
       if (mounted) setState(() => _saving = false);
     }
   }
@@ -188,12 +318,16 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
     final choice = await showDialog<_AssignChoice>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
         title: Text('Assign ${subject.name}'),
         content: const Text(
-          'Existing teacher select karein ya naya teacher account '
-          'create karein. Subject Teacher ko subject assign hoga; '
-          'Class Teacher ko is section ka class teacher set kiya jayega.',
+          'Choose an existing teacher or create a new teacher account. '
+          'You can select the role for this section.',
+          style: TextStyle(height: 1.5, color: _muted),
         ),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         actions: [
           TextButton(
             onPressed: () =>
@@ -201,27 +335,27 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
             child: const Text('Cancel'),
           ),
           OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _darkGreen,
+              side: const BorderSide(color: _border),
+            ),
             onPressed: () =>
                 Navigator.pop(dialogContext, _AssignChoice.createNew),
-            icon: const Icon(Icons.person_add_alt_1),
-            label: const Text('Create Teacher'),
+            icon: const Icon(Icons.person_add_alt_1, size: 18),
+            label: const Text('Create New'),
           ),
           FilledButton(
+            style: _primaryButtonStyle(),
             onPressed: _teachers.isEmpty
                 ? null
-                : () => Navigator.pop(
-                      dialogContext,
-                      _AssignChoice.existing,
-                    ),
+                : () => Navigator.pop(dialogContext, _AssignChoice.existing),
             child: const Text('Select Existing'),
           ),
         ],
       ),
     );
 
-    if (!mounted || choice == null || choice == _AssignChoice.cancel) {
-      return;
-    }
+    if (!mounted || choice == null || choice == _AssignChoice.cancel) return;
 
     if (choice == _AssignChoice.createNew) {
       await _createAndAssignTeacher(subject);
@@ -235,87 +369,130 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
     StaffMember? currentTeacher,
   ) async {
     if (_teachers.isEmpty) {
-      _message('Pehle teacher account create karein.');
+      _message('No active teachers were found. Create a teacher first.');
       return;
     }
 
     String? selectedTeacherId = currentTeacher?.id;
+    String selectedRole = 'subjectTeacher';
 
-    final teacherId = await showDialog<String>(
+    final selection = await showDialog<_ExistingTeacherSelection>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text('Assign ${subject.name}'),
-          content: DropdownButtonFormField<String>(
-            initialValue: selectedTeacherId,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Select teacher',
-              border: OutlineInputBorder(),
-            ),
-            items: _teachers.map((teacher) {
-              return DropdownMenuItem<String>(
-                value: teacher.id,
-                child: Text(
-                  '${teacher.name} (${teacher.role})',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-            }).toList(),
-            onChanged: (value) {
-              setDialogState(() => selectedTeacherId = value);
-            },
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
+          title: Text('Assign ${subject.name}'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedTeacherId,
+                    isExpanded: true,
+                    decoration: _inputDecoration(
+                      label: 'Select Teacher',
+                      icon: Icons.person_outline_rounded,
+                    ),
+                    items: _teachers.map((teacher) {
+                      return DropdownMenuItem<String>(
+                        value: teacher.id,
+                        child: Text(
+                          teacher.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setDialogState(() => selectedTeacherId = value);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedRole,
+                    isExpanded: true,
+                    decoration: _inputDecoration(
+                      label: 'Role for This Section',
+                      icon: Icons.badge_outlined,
+                    ),
+                    items: const [
+                      DropdownMenuItem<String>(
+                        value: 'subjectTeacher',
+                        child: Text('Subject Teacher'),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'classTeacher',
+                        child: Text('Class Teacher'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => selectedRole = value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  const _InformationNote(
+                    message:
+                        'A Class Teacher assigned here will also retain the selected subject assignment, allowing them to manage tests and marks for that subject.',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancel'),
             ),
-            FilledButton(
+            FilledButton.icon(
+              style: _primaryButtonStyle(),
               onPressed: selectedTeacherId == null
                   ? null
-                  : () => Navigator.pop(dialogContext, selectedTeacherId),
-              child: const Text('Assign'),
+                  : () => Navigator.pop(
+                        dialogContext,
+                        _ExistingTeacherSelection(
+                          teacherId: selectedTeacherId!,
+                          role: selectedRole,
+                        ),
+                      ),
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('Assign'),
             ),
           ],
         ),
       ),
     );
 
-    if (teacherId == null || !mounted) return;
+    if (selection == null || !mounted) return;
 
-    await _assignSelectedTeacher(subject, teacherId);
+    await _assignSelectedTeacher(
+      subject: subject,
+      teacherId: selection.teacherId,
+      selectedRole: selection.role,
+    );
   }
 
-  /// Uses the selected teacher's role to choose the correct assignment path.
-  ///
-  /// Class teachers are saved on the section document.
-  /// Subject teachers receive a normal subject assignment.
-  Future<void> _assignSelectedTeacher(
-    Subject subject,
-    String teacherId,
-  ) async {
-    StaffMember? selectedTeacher;
-
-    for (final teacher in _teachers) {
-      if (teacher.id == teacherId) {
-        selectedTeacher = teacher;
-        break;
-      }
-    }
-
-    if (selectedTeacher == null) {
-      _message('Selected teacher nahi mila. Refresh karke dobara try karein.');
+  Future<void> _assignSelectedTeacher({
+    required Subject subject,
+    required String teacherId,
+    required String selectedRole,
+  }) async {
+    if (selectedRole == 'classTeacher') {
+      await _saveClassTeacher(subject: subject, teacherId: teacherId);
       return;
     }
 
-    if (selectedTeacher.role == 'classTeacher') {
-      await _saveClassTeacher(teacherId);
-    } else if (selectedTeacher.role == 'subjectTeacher') {
-      await _saveAssignment(subject, teacherId);
-    } else {
-      _message('Selected teacher ka role valid nahi hai.');
+    if (selectedRole == 'subjectTeacher') {
+      await _saveSubjectTeacher(subject: subject, teacherId: teacherId);
+      return;
     }
+
+    _message('Please select a valid teacher role.');
   }
 
   Future<void> _createAndAssignTeacher(Subject subject) async {
@@ -332,103 +509,105 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
         barrierDismissible: false,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Create New Teacher'),
-            content: SingleChildScrollView(
-              child: SizedBox(
-                width: 420,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: const Row(
+              children: [
+                Icon(Icons.person_add_alt_1, color: _green),
+                SizedBox(width: 10),
+                Expanded(child: Text('Create Teacher')),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      role == 'classTeacher'
-                          ? 'Naya teacher ${widget.className}, '
-                              'Section ${widget.section.name} ka '
-                              'class teacher banega.'
-                          : 'Teacher ko ${subject.name} ke liye '
-                              'is section mein assign kiya jayega.',
-                      style: const TextStyle(color: Colors.black54),
+                    _InformationNote(
+                      message: role == 'classTeacher'
+                          ? 'The teacher will be assigned as Class Teacher and will retain the ${subject.name} subject assignment in this section.'
+                          : 'The teacher will be assigned to ${subject.name} in this section.',
                     ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: nameController,
                       autofocus: true,
                       textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
-                        labelText: 'Teacher name *',
-                        prefixIcon: Icon(Icons.person_outline),
-                        border: OutlineInputBorder(),
+                      decoration: _inputDecoration(
+                        label: 'Teacher Name',
+                        icon: Icons.person_outline_rounded,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     TextField(
                       controller: emailController,
                       keyboardType: TextInputType.emailAddress,
                       autocorrect: false,
-                      decoration: const InputDecoration(
-                        labelText: 'Email address *',
-                        prefixIcon: Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(),
+                      decoration: _inputDecoration(
+                        label: 'Email Address',
+                        icon: Icons.email_outlined,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     TextField(
                       controller: passwordController,
                       obscureText: obscurePassword,
                       autocorrect: false,
                       enableSuggestions: false,
-                      decoration: InputDecoration(
-                        labelText: 'Temporary password *',
-                        helperText: '8–128 characters',
-                        prefixIcon: const Icon(Icons.lock_outline),
+                      decoration: _inputDecoration(
+                        label: 'Temporary Password',
+                        hint: '8–128 characters',
+                        icon: Icons.lock_outline_rounded,
+                      ).copyWith(
                         suffixIcon: IconButton(
-                          onPressed: () {
-                            setDialogState(() {
-                              obscurePassword = !obscurePassword;
-                            });
-                          },
+                          tooltip: obscurePassword ? 'Show password' : 'Hide password',
+                          onPressed: () => setDialogState(
+                            () => obscurePassword = !obscurePassword,
+                          ),
                           icon: Icon(
                             obscurePassword
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined,
                           ),
                         ),
-                        border: const OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
                       initialValue: role,
                       isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Teacher role',
-                        border: OutlineInputBorder(),
+                      decoration: _inputDecoration(
+                        label: 'Teacher Role',
+                        icon: Icons.badge_outlined,
                       ),
                       items: const [
-                        DropdownMenuItem(
+                        DropdownMenuItem<String>(
                           value: 'subjectTeacher',
                           child: Text('Subject Teacher'),
                         ),
-                        DropdownMenuItem(
+                        DropdownMenuItem<String>(
                           value: 'classTeacher',
                           child: Text('Class Teacher'),
                         ),
                       ],
                       onChanged: (value) {
-                        if (value != null) {
-                          setDialogState(() => role = value);
-                        }
+                        if (value != null) setDialogState(() => role = value);
                       },
                     ),
                   ],
                 ),
               ),
             ),
+            actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('Cancel'),
               ),
               FilledButton.icon(
+                style: _primaryButtonStyle(),
                 onPressed: () {
                   final name = nameController.text.trim();
                   final email = emailController.text.trim();
@@ -451,7 +630,7 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
                     ),
                   );
                 },
-                icon: const Icon(Icons.person_add_alt_1),
+                icon: const Icon(Icons.person_add_alt_1, size: 18),
                 label: const Text('Create & Assign'),
               ),
             ],
@@ -460,11 +639,8 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
       );
 
       if (details == null || !mounted) return;
-
       setState(() => _saving = true);
 
-      // Creates the account through the trusted callable function.
-      // This should retain the admin's current session.
       final teacher = await widget.repository.createTeacherAccount(
         name: details.name,
         email: details.email,
@@ -472,69 +648,66 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
         role: details.role,
       );
 
-      try {
-        if (details.role == 'classTeacher') {
-          // Save the teacher UID on the selected section.
-          await widget.repository.assignClassTeacher(
-            schoolId: widget.section.schoolId,
-            teacherId: teacher.id,
-            classId: widget.section.classId,
-            sectionId: widget.section.id,
-          );
+      if (details.role == 'classTeacher') {
+        // Keep the subject assignment as well as the section class-teacher link.
+        await widget.repository.assignTeacher(
+          schoolId: widget.section.schoolId,
+          teacherId: teacher.id,
+          classId: widget.section.classId,
+          sectionId: widget.section.id,
+          subjectId: subject.id,
+          academicYearId: widget.section.academicYearId,
+        );
+        await widget.repository.assignClassTeacher(
+          schoolId: widget.section.schoolId,
+          teacherId: teacher.id,
+          classId: widget.section.classId,
+          sectionId: widget.section.id,
+        );
+      } else {
+        await widget.repository.assignTeacher(
+          schoolId: widget.section.schoolId,
+          teacherId: teacher.id,
+          classId: widget.section.classId,
+          sectionId: widget.section.id,
+          subjectId: subject.id,
+          academicYearId: widget.section.academicYearId,
+        );
+      }
 
-          await _load();
-
-          if (mounted) {
-            _message(
-              'Class Teacher account created and assigned to '
-              '${widget.className}, Section ${widget.section.name}.',
-            );
-          }
-        } else {
-          // Preserve the existing subject-teacher assignment behavior.
-          await widget.repository.assignTeacher(
-            schoolId: widget.section.schoolId,
-            teacherId: teacher.id,
-            classId: widget.section.classId,
-            sectionId: widget.section.id,
-            subjectId: subject.id,
-            academicYearId: widget.section.academicYearId,
-          );
-
-          await _load();
-
-          if (mounted) {
-            _message(
-              'Teacher account created and assigned to ${subject.name}.',
-            );
-          }
-        }
-      } catch (e) {
-        await _load();
-
-        if (mounted) {
-          _message(
-            'Teacher account create ho gaya, lekin assignment fail hui: $e',
-          );
-        }
+      await _load();
+      if (mounted) {
+        _message('Teacher created and assigned successfully.', isSuccess: true);
       }
     } catch (e) {
       if (mounted) {
-        _message('Teacher account create nahi hua: $e');
+        _message('Unable to complete the assignment: ${_friendlyError(e)}');
       }
     } finally {
       nameController.dispose();
       emailController.dispose();
       passwordController.dispose();
-
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _saveClassTeacher(String teacherId) async {
+  Future<void> _saveClassTeacher({
+    required Subject subject,
+    required String teacherId,
+  }) async {
     setState(() => _saving = true);
 
     try {
+      // Ensure the teacher can access Tests and Marks for this subject.
+      await widget.repository.assignTeacher(
+        schoolId: widget.section.schoolId,
+        teacherId: teacherId,
+        classId: widget.section.classId,
+        sectionId: widget.section.id,
+        subjectId: subject.id,
+        academicYearId: widget.section.academicYearId,
+      );
+
       await widget.repository.assignClassTeacher(
         schoolId: widget.section.schoolId,
         teacherId: teacherId,
@@ -543,26 +716,25 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
       );
 
       await _load();
-
       if (mounted) {
         _message(
-          'Class Teacher successfully assigned to '
-          '${widget.className}, Section ${widget.section.name}.',
+          'Class Teacher and subject assignments saved successfully.',
+          isSuccess: true,
         );
       }
     } catch (e) {
       if (mounted) {
-        _message('Class Teacher assign nahi hua: $e');
+        _message('Unable to assign Class Teacher: ${_friendlyError(e)}');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _saveAssignment(
-    Subject subject,
-    String teacherId,
-  ) async {
+  Future<void> _saveSubjectTeacher({
+    required Subject subject,
+    required String teacherId,
+  }) async {
     setState(() => _saving = true);
 
     try {
@@ -575,235 +747,670 @@ class _SubjectsTeacherScreenState extends State<SubjectsTeacherScreen> {
         academicYearId: widget.section.academicYearId,
       );
 
+      // If this teacher was the Class Teacher of this exact section,
+      // remove only that section-level assignment. Class Teacher assignments
+      // in other sections remain untouched.
+      await widget.repository.removeClassTeacherIfAssigned(
+        schoolId: widget.section.schoolId,
+        sectionId: widget.section.id,
+        teacherId: teacherId,
+      );
+
       await _load();
 
       if (mounted) {
-        _message('Teacher assignment successfully saved.');
+        _message('Subject Teacher assignment saved successfully.', isSuccess: true);
       }
     } catch (e) {
       if (mounted) {
-        _message('Assignment save nahi hui: $e');
+        _message('Unable to save the assignment: ${_friendlyError(e)}');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  void _message(String message) {
+  // --------------------------------------------------------------------------
+  // UI HELPERS
+  // --------------------------------------------------------------------------
+
+  InputDecoration _inputDecoration({
+    required String label,
+    required IconData icon,
+    String? hint,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: Icon(icon, size: 20, color: _green),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _green, width: 1.6),
+      ),
+    );
+  }
+
+  ButtonStyle _primaryButtonStyle() {
+    return FilledButton.styleFrom(
+      backgroundColor: _green,
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
+  }
+
+  void _message(String message, {bool isSuccess = false}) {
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(message),
           behavior: SnackBarBehavior.floating,
+          backgroundColor: isSuccess ? _darkGreen : const Color(0xFFB42318),
+          content: Text(message),
         ),
       );
   }
+
+  // --------------------------------------------------------------------------
+  // SCREEN
+  // --------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _background,
       appBar: AppBar(
-        title: const Text('Subjects & Teachers'),
-        backgroundColor: _background,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.white,
         foregroundColor: _darkGreen,
+        titleSpacing: 20,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Subjects & Teachers',
+              style: TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
+                color: _darkGreen,
+              ),
+            ),
+            SizedBox(height: 2),
+            Text(
+              'Manage section subjects and teacher assignments',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.normal,
+                color: _muted,
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Refresh',
             onPressed: _loading || _saving ? null : _load,
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
           ),
+          const SizedBox(width: 8),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _saving || _loading ? null : _addSubject,
-        backgroundColor: _green,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Subject'),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: _border),
+        ),
       ),
       body: SafeArea(
         child: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(color: _green))
             : _error != null
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.error_outline, size: 42),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Data load nahi ho saka.',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          SelectableText(
-                            _error!,
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 12),
-                          FilledButton(
-                            onPressed: _load,
-                            child: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
+                ? _buildErrorState()
                 : Stack(
                     children: [
-                      RefreshIndicator(
-                        onRefresh: _load,
-                        child: ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                          children: [
-                            Card(
-                              elevation: 0,
-                              child: ListTile(
-                                leading: const CircleAvatar(
-                                  backgroundColor: Color(0xFFEAF6EF),
-                                  child: Icon(
-                                    Icons.class_outlined,
-                                    color: _green,
-                                  ),
-                                ),
-                                title: Text(
-                                  '${widget.className} — Section ${widget.section.name}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  '${_subjects.length} section subjects · '
-                                  '${_assignments.length} active assignments',
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Subjects for this section',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: _darkGreen,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            if (_subjects.isEmpty)
-                              const Card(
-                                child: Padding(
-                                  padding: EdgeInsets.all(24),
-                                  child: Column(
-                                    children: [
-                                      Icon(
-                                        Icons.menu_book_outlined,
-                                        size: 42,
-                                      ),
-                                      SizedBox(height: 12),
-                                      Text(
-                                        'Abhi is section mein koi subject nahi.',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      SizedBox(height: 6),
-                                      Text(
-                                        'Add Subject par click karke is section '
-                                        'ka pehla subject banayein.',
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            else
-                              ..._subjects.map((subject) {
-                                final teacher = _teacherFor(subject.id);
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final maxWidth = constraints.maxWidth;
+                          final contentWidth = maxWidth >= 1160 ? 1120.0 : maxWidth;
 
-                                return Card(
-                                  elevation: 0,
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.all(12),
-                                    leading: const CircleAvatar(
-                                      backgroundColor: Color(0xFFEAF6EF),
-                                      child: Icon(
-                                        Icons.menu_book_outlined,
-                                        color: _green,
-                                      ),
-                                    ),
-                                    title: Text(
-                                      subject.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    subtitle: Padding(
-                                      padding: const EdgeInsets.only(top: 6),
-                                      child: Text(
-                                        [
-                                          if (subject.code != null &&
-                                              subject.code!.isNotEmpty)
-                                            'Code: ${subject.code}',
-                                          teacher == null
-                                              ? 'Teacher not assigned'
-                                              : 'Teacher: ${teacher.name}',
-                                        ].join('\n'),
-                                      ),
-                                    ),
-                                    trailing: _saving
-                                        ? const SizedBox(
-                                            width: 22,
-                                            height: 22,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                        : TextButton(
-                                            onPressed: () =>
-                                                _assignTeacher(subject),
-                                            child: Text(
-                                              teacher == null ? 'Assign' : 'Change',
-                                            ),
-                                          ),
+                          return Align(
+                            alignment: Alignment.topCenter,
+                            child: SizedBox(
+                              width: contentWidth,
+                              child: RefreshIndicator(
+                                onRefresh: _load,
+                                color: _green,
+                                child: ListView(
+                                  physics: const AlwaysScrollableScrollPhysics(),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: maxWidth < 600 ? 16 : 28,
+                                    vertical: 24,
                                   ),
-                                );
-                              }),
-                            if (_teachers.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.all(12),
-                                child: Text(
-                                  'Koi active teacher nahi mila. Subject ke '
-                                  'saamne Assign dabakar naya teacher account '
-                                  'create karein.',
-                                  textAlign: TextAlign.center,
+                                  children: [
+                                    _buildSectionHeader(),
+                                    const SizedBox(height: 28),
+                                    _buildSubjectsHeader(),
+                                    const SizedBox(height: 16),
+                                    _buildSubjectsGrid(maxWidth: contentWidth),
+                                  ],
                                 ),
                               ),
-                          ],
-                        ),
+                            ),
+                          );
+                        },
                       ),
                       if (_saving)
                         const Positioned(
                           top: 0,
                           left: 0,
                           right: 0,
-                          child: LinearProgressIndicator(),
+                          child: LinearProgressIndicator(
+                            minHeight: 3,
+                            color: _green,
+                            backgroundColor: Color(0xFFDCEFE3),
+                          ),
                         ),
                     ],
                   ),
       ),
     );
   }
+
+  Widget _buildSectionHeader() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Colors.white, Color(0xFFF0F8F2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE1F2E7),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.account_balance_outlined,
+                  color: _darkGreen,
+                  size: 27,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.className,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: _text,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      'Section ${widget.section.name}',
+                      style: const TextStyle(fontSize: 14, color: _muted),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE1F2E7),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle_outline_rounded, size: 15, color: _darkGreen),
+                    SizedBox(width: 6),
+                    Text(
+                      'Section',
+                      style: TextStyle(
+                        color: _darkGreen,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _summaryPill(
+                icon: Icons.menu_book_outlined,
+                label: '${_subjects.length} Subjects',
+              ),
+              _summaryPill(
+                icon: Icons.assignment_ind_outlined,
+                label: '${_assignments.length} Active Assignments',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryPill({required IconData icon, required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: _border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: _green, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: _text,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubjectsHeader() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 500;
+        final title = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Section Subjects',
+              style: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.w800,
+                color: _text,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              'Assign teachers and manage subject responsibilities.',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey.shade700,
+                height: 1.4,
+              ),
+            ),
+          ],
+        );
+
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              title,
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                style: _primaryButtonStyle(),
+                onPressed: _saving ? null : _addSubject,
+                icon: const Icon(Icons.add_rounded, size: 20),
+                label: const Text('Add Subject'),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(child: title),
+            const SizedBox(width: 12),
+            FilledButton.icon(
+              style: _primaryButtonStyle(),
+              onPressed: _saving ? null : _addSubject,
+              icon: const Icon(Icons.add_rounded, size: 20),
+              label: const Text('Add Subject'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSubjectsGrid({required double maxWidth}) {
+    if (_subjects.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 42),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _border),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: const BoxDecoration(
+                color: Color(0xFFEAF5ED),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.menu_book_outlined, color: _green, size: 30),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'No Subjects Yet',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _text),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Add a subject to get started with teacher assignments.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _muted, height: 1.5),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              style: _primaryButtonStyle(),
+              onPressed: _saving ? null : _addSubject,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add First Subject'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    const spacing = 16.0;
+    final columns = maxWidth >= 800 ? 2 : 1;
+    final cardWidth = columns == 2 ? (maxWidth - spacing) / 2 : maxWidth;
+
+    return Wrap(
+      spacing: spacing,
+      runSpacing: spacing,
+      children: _subjects.map((subject) {
+        return SizedBox(
+          width: cardWidth,
+          child: _buildSubjectCard(
+            subject: subject,
+            teacher: _teacherFor(subject.id),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildSubjectCard({required Subject subject, required StaffMember? teacher}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF163B28).withValues(alpha: 0.035),
+            blurRadius: 16,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F5EC),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(Icons.menu_book_rounded, color: _green, size: 24),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      subject.name,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _text),
+                    ),
+                    if (subject.code != null && subject.code!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Text('Code: ${subject.code}', style: const TextStyle(color: _muted, fontSize: 12)),
+                    ],
+                  ],
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: teacher == null
+                          ? const Color(0xFFFFF4E5)
+                          : const Color(0xFFE4F5E9),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Text(
+                      teacher == null ? 'Unassigned' : 'Assigned',
+                      style: TextStyle(
+                        color: teacher == null
+                            ? const Color(0xFF9A6700)
+                            : _darkGreen,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  IconButton(
+                    tooltip: 'Edit subject name or code',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 36,
+                      height: 36,
+                    ),
+                    padding: EdgeInsets.zero,
+                    onPressed: _saving ? null : () => _editSubject(subject),
+                    icon: const Icon(
+                      Icons.edit_outlined,
+                      size: 19,
+                      color: _green,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Divider(height: 1, color: _border),
+          ),
+          const Text(
+            'Assigned Teacher',
+            style: TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: const Color(0xFFE8F5EC),
+                child: Icon(
+                  teacher == null ? Icons.person_outline_rounded : Icons.person_rounded,
+                  color: _darkGreen,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Text(
+                  teacher?.name ?? 'No teacher assigned',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: teacher == null ? _muted : _text,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _darkGreen,
+                side: const BorderSide(color: Color(0xFFB8D8C2)),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: _saving ? null : () => _assignTeacher(subject),
+              icon: Icon(
+                teacher == null ? Icons.person_add_alt_1 : Icons.edit_outlined,
+                size: 18,
+              ),
+              label: Text(
+                teacher == null ? 'Assign Teacher' : 'Change Teacher',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: _border),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 62,
+                  height: 62,
+                  decoration: const BoxDecoration(color: Color(0xFFFDECEC), shape: BoxShape.circle),
+                  child: const Icon(Icons.error_outline_rounded, color: Color(0xFFB42318), size: 32),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Unable to Load Subjects',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _text),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _error ?? 'An unexpected error occurred.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: _muted, height: 1.5),
+                ),
+                const SizedBox(height: 22),
+                FilledButton.icon(
+                  style: _primaryButtonStyle(),
+                  onPressed: _load,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Try Again'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-enum _AssignChoice {
-  cancel,
-  existing,
-  createNew,
+class _InformationNote extends StatelessWidget {
+  const _InformationNote({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F8F2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD8EBDD)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded, color: Color(0xFF267344), size: 19),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: Color(0xFF315B40), fontSize: 12, height: 1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _AssignChoice { cancel, existing, createNew }
+
+class _ExistingTeacherSelection {
+  const _ExistingTeacherSelection({required this.teacherId, required this.role});
+
+  final String teacherId;
+  final String role;
 }
 
 class _NewTeacherDetails {
