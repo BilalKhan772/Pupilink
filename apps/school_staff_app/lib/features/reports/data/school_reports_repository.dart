@@ -1,4 +1,3 @@
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:school_core/school_core.dart';
@@ -32,6 +31,43 @@ class SchoolReportsRepository {
 
   CollectionReference<Map<String, dynamic>> get _marks =>
       _db.collection(FirestoreCollections.studentMarks);
+
+  /// Normalizes subject names for grouping in reports.
+  ///
+  /// Math, Maths, and Mathematics are treated as the same subject.
+  /// Other subjects are grouped by their case-insensitive normalized name,
+  /// with repeated whitespace collapsed.
+  String _subjectGroupKey(String subjectName) {
+    final normalized = subjectName
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), ' ');
+
+    final compact = normalized.replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    if (const {'math', 'maths', 'mathematics'}.contains(compact)) {
+      return 'math';
+    }
+
+    return normalized;
+  }
+
+  /// Provides a consistent display name for known aliases.
+  String _subjectDisplayName(String subjectName) {
+    final trimmed = subjectName.trim();
+
+    if (trimmed.isEmpty) return 'Unknown Subject';
+
+    final compact = trimmed
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    if (const {'math', 'maths', 'mathematics'}.contains(compact)) {
+      return 'Math';
+    }
+
+    return trimmed;
+  }
 
   Future<List<SchoolClass>> getClasses(String schoolId) async {
     if (schoolId.trim().isEmpty) {
@@ -159,14 +195,15 @@ class SchoolReportsRepository {
         .where((mark) {
           final obtained =
               (mark['obtainedMarks'] as num?)?.toDouble() ?? 0;
+
           final total = (mark['totalMarks'] as num?)?.toDouble() ?? 0;
 
           return total > 0 && obtained >= 0 && obtained <= total;
         })
         .toList();
 
-    // Names normalize karne se "English", " english " aur "ENGLISH"
-    // same subject group mein aa jayenge.
+    // Group subject totals by normalized subject name rather than subjectId,
+    // because a subject may have different document IDs in different sections.
     final subjectTotals = <String, Map<String, dynamic>>{};
     final studentTotals = <String, Map<String, dynamic>>{};
 
@@ -175,10 +212,11 @@ class SchoolReportsRepository {
 
     for (final mark in publishedMarks) {
       final subjectId = (mark['subjectId'] as String? ?? '').trim();
+
       final rawSubjectName =
           (mark['subjectName'] as String? ?? '').trim();
-      final subjectName =
-          rawSubjectName.isEmpty ? 'Unknown Subject' : rawSubjectName;
+
+      final subjectName = _subjectDisplayName(rawSubjectName);
 
       final obtained = (mark['obtainedMarks'] as num).toDouble();
       final total = (mark['totalMarks'] as num).toDouble();
@@ -186,7 +224,7 @@ class SchoolReportsRepository {
 
       if (subjectId.isEmpty) continue;
 
-      final subjectKey = subjectName.toLowerCase();
+      final subjectKey = _subjectGroupKey(subjectName);
 
       final subject = subjectTotals.putIfAbsent(subjectKey, () {
         return {
@@ -201,9 +239,12 @@ class SchoolReportsRepository {
 
       subject['obtainedMarks'] =
           (subject['obtainedMarks'] as double) + obtained;
+
       subject['totalMarks'] =
           (subject['totalMarks'] as double) + total;
+
       (subject['studentIds'] as Set<String>).add(studentId);
+
       subject['testCount'] = (subject['testCount'] as int) + 1;
 
       final student = studentTotals.putIfAbsent(studentId, () {
@@ -221,14 +262,14 @@ class SchoolReportsRepository {
 
       student['obtainedMarks'] =
           (student['obtainedMarks'] as double) + obtained;
+
       student['totalMarks'] =
           (student['totalMarks'] as double) + total;
 
       final studentSubjects =
           student['subjects'] as Map<String, Map<String, dynamic>>;
 
-      final studentSubject =
-          studentSubjects.putIfAbsent(subjectKey, () {
+      final studentSubject = studentSubjects.putIfAbsent(subjectKey, () {
         return {
           'subjectId': subjectId,
           'subjectName': subjectName,
@@ -239,6 +280,7 @@ class SchoolReportsRepository {
 
       studentSubject['obtainedMarks'] =
           (studentSubject['obtainedMarks'] as double) + obtained;
+
       studentSubject['totalMarks'] =
           (studentSubject['totalMarks'] as double) + total;
 
