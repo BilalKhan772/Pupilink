@@ -1,4 +1,3 @@
-
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import {
   getFirestore,
@@ -19,58 +18,56 @@ function calculateGrade(percentage: number): string {
   return "F";
 }
 
+async function removeTemporaryResult(
+  markId: string,
+  reason: string,
+): Promise<void> {
+  try {
+    await db.collection("results").doc(markId).delete();
+  } catch (error) {
+    console.error("Unable to remove invalid temporary result.", {
+      markId,
+      reason,
+      error,
+    });
+  }
+}
+
 export const publishStudentResult = onDocumentWritten(
   "studentMarks/{markId}",
   async (event) => {
     const after = event.data?.after;
-    const before = event.data?.before;
+    const markId = event.params.markId;
+    const resultRef = db.collection("results").doc(markId);
 
     if (!after || !after.exists) {
-      // Mark document delete hone par temporary result remove karein.
-      await db
-        .collection("results")
-        .doc(event.params.markId)
-        .delete()
-        .catch((error) => {
-          console.error("Unable to delete temporary result.", error);
-        });
-
+      await removeTemporaryResult(markId, "The source mark was deleted.");
       return;
     }
 
     const mark = after.data();
 
     if (!mark) {
-      console.error("Student mark data is missing.", {
-        markId: event.params.markId,
-      });
+      console.error("Student mark data is missing.", { markId });
+      await removeTemporaryResult(markId, "The mark data is missing.");
       return;
     }
 
-    const markId = event.params.markId;
-    const resultRef = db.collection("results").doc(markId);
-
-    // Draft marks ko Parent App mein publish na karein.
+    // Draft or otherwise unpublished marks must not appear in the Parent App.
     if (mark.status !== "published") {
-      if (before?.exists) {
-        await resultRef.delete().catch((error) => {
-          console.error("Unable to remove unpublished result.", {
-            markId,
-            error,
-          });
-        });
-      }
-
+      await removeTemporaryResult(markId, "The mark is not published.");
       return;
     }
 
     const studentId = mark.studentId;
     const examId = mark.examId;
     const schoolId = mark.schoolId;
+    const classId = mark.classId;
+    const sectionId = mark.sectionId;
     const subjectId = mark.subjectId;
 
-    const obtainedMarks = Number(mark.obtainedMarks);
-    const totalMarks = Number(mark.totalMarks);
+    const obtainedMarks = mark.obtainedMarks;
+    const totalMarks = mark.totalMarks;
 
     if (
       typeof studentId !== "string" ||
@@ -79,8 +76,14 @@ export const publishStudentResult = onDocumentWritten(
       !examId ||
       typeof schoolId !== "string" ||
       !schoolId ||
+      typeof classId !== "string" ||
+      !classId ||
+      typeof sectionId !== "string" ||
+      !sectionId ||
       typeof subjectId !== "string" ||
       !subjectId ||
+      typeof obtainedMarks !== "number" ||
+      typeof totalMarks !== "number" ||
       !Number.isFinite(obtainedMarks) ||
       !Number.isFinite(totalMarks) ||
       totalMarks <= 0 ||
@@ -88,40 +91,80 @@ export const publishStudentResult = onDocumentWritten(
       obtainedMarks > totalMarks
     ) {
       console.error("Invalid published student mark.", { markId });
+      await removeTemporaryResult(markId, "The published mark is invalid.");
       return;
     }
 
     const testRef = db.collection("tests").doc(examId);
+    const studentRef = db.collection("students").doc(studentId);
 
-    const [testSnapshot, existingResult] = await Promise.all([
-      testRef.get(),
-      resultRef.get(),
-    ]);
+    const [testSnapshot, studentSnapshot, existingResult] =
+      await Promise.all([
+        testRef.get(),
+        studentRef.get(),
+        resultRef.get(),
+      ]);
 
     if (!testSnapshot.exists) {
       console.error("Test document not found.", { examId, markId });
+      await removeTemporaryResult(markId, "The test does not exist.");
       return;
     }
 
     const test = testSnapshot.data();
+    const student = studentSnapshot.data();
 
     if (!test) {
       console.error("Test data is missing.", { examId, markId });
+      await removeTemporaryResult(markId, "The test data is missing.");
       return;
     }
 
+    if (!studentSnapshot.exists || !student) {
+      console.error("Student document not found.", { studentId, markId });
+      await removeTemporaryResult(markId, "The student does not exist.");
+      return;
+    }
+
+    // Validate the mark against the test's full scope.
     if (
       test.schoolId !== schoolId ||
-      test.sectionId !== mark.sectionId ||
+      test.classId !== classId ||
+      test.sectionId !== sectionId ||
       test.subjectId !== subjectId
     ) {
-      console.error("Test and mark data do not match.", { markId });
+      console.error("Test and mark scope do not match.", { markId });
+      await removeTemporaryResult(
+        markId,
+        "The mark does not match the test class, section, or subject.",
+      );
+      return;
+    }
+
+    // Validate the student against the authoritative student document.
+    // This prevents publishing a result for a different class or section.
+    if (
+      student.schoolId !== schoolId ||
+      student.classId !== classId ||
+      student.sectionId !== sectionId
+    ) {
+      console.error("Student and mark scope do not match.", {
+        markId,
+        studentId,
+        markClassId: classId,
+        markSectionId: sectionId,
+        studentClassId: student.classId,
+        studentSectionId: student.sectionId,
+      });
+      await removeTemporaryResult(
+        markId,
+        "The student does not belong to the class and section of this mark.",
+      );
       return;
     }
 
     const now = Timestamp.now();
     const previous = existingResult.data();
-
     const previousExpiry = previous?.expiresAt;
 
     const wasExpired =
@@ -137,8 +180,7 @@ export const publishStudentResult = onDocumentWritten(
       previous?.expiresAt instanceof Timestamp && !wasExpired
         ? previous.expiresAt
         : Timestamp.fromMillis(
-            publishedAt.toMillis() +
-              RESULT_EXPIRY_DAYS * DAY_MS,
+            publishedAt.toMillis() + RESULT_EXPIRY_DAYS * DAY_MS,
           );
 
     const percentage = (obtainedMarks / totalMarks) * 100;
@@ -153,8 +195,8 @@ export const publishStudentResult = onDocumentWritten(
     const result = {
       studentId,
       schoolId,
-      sectionId: mark.sectionId ?? test.sectionId ?? "",
-      classId: mark.classId ?? test.classId ?? "",
+      classId,
+      sectionId,
       subjectId,
       subject: mark.subjectName ?? test.subjectName ?? "Subject",
       examId,
@@ -181,6 +223,10 @@ export const publishStudentResult = onDocumentWritten(
     console.log("Student result published.", {
       markId,
       studentId,
+      schoolId,
+      classId,
+      sectionId,
+      subjectId,
       expiresAt: expiresAt.toDate().toISOString(),
     });
   },

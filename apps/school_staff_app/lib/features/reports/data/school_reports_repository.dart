@@ -26,23 +26,16 @@ class SchoolReportsRepository {
   CollectionReference<Map<String, dynamic>> get _students =>
       _db.collection(FirestoreCollections.students);
 
-  CollectionReference<Map<String, dynamic>> get _tests =>
-      _db.collection(FirestoreCollections.tests);
-
   CollectionReference<Map<String, dynamic>> get _marks =>
       _db.collection(FirestoreCollections.studentMarks);
 
-  /// Normalizes subject names for grouping in reports.
-  ///
-  /// Math, Maths, and Mathematics are treated as the same subject.
-  /// Other subjects are grouped by their case-insensitive normalized name,
-  /// with repeated whitespace collapsed.
+  /// Groups known aliases under one canonical report subject.
+  /// Math, Maths and Mathematics are the same subject for reporting.
   String _subjectGroupKey(String subjectName) {
     final normalized = subjectName
         .trim()
         .toLowerCase()
         .replaceAll(RegExp(r'\s+'), ' ');
-
     final compact = normalized.replaceAll(RegExp(r'[^a-z0-9]'), '');
 
     if (const {'math', 'maths', 'mathematics'}.contains(compact)) {
@@ -52,10 +45,8 @@ class SchoolReportsRepository {
     return normalized;
   }
 
-  /// Provides a consistent display name for known aliases.
   String _subjectDisplayName(String subjectName) {
     final trimmed = subjectName.trim();
-
     if (trimmed.isEmpty) return 'Unknown Subject';
 
     final compact = trimmed
@@ -71,7 +62,7 @@ class SchoolReportsRepository {
 
   Future<List<SchoolClass>> getClasses(String schoolId) async {
     if (schoolId.trim().isEmpty) {
-      throw ArgumentError('School ID missing hai.');
+      throw ArgumentError('School ID is missing.');
     }
 
     final snapshot = await _classes
@@ -100,7 +91,7 @@ class SchoolReportsRepository {
     required String classId,
   }) async {
     if (schoolId.trim().isEmpty || classId.trim().isEmpty) {
-      throw ArgumentError('School aur class select karein.');
+      throw ArgumentError('Please select a school and class.');
     }
 
     final snapshot = await _sections
@@ -111,8 +102,8 @@ class SchoolReportsRepository {
     final sections = snapshot.docs
         .where((doc) => doc.data()['isActive'] != false)
         .map((doc) => <String, dynamic>{
-              'id': doc.id,
               ...doc.data(),
+              'id': doc.id,
             })
         .toList();
 
@@ -121,48 +112,59 @@ class SchoolReportsRepository {
               a['sectionName'] as String? ??
               '')
           .toLowerCase();
-
       final bName = (b['name'] as String? ??
               b['sectionName'] as String? ??
               '')
           .toLowerCase();
-
       return aName.compareTo(bName);
     });
 
     return sections;
   }
 
-  /// Class report mein tamam sections ke same-name subjects combine hote hain.
-  /// sectionId diya ho to sirf us section ka data return hota hai.
-  /// Sirf published marks report mein shamil hote hain.
+  /// A class report includes every active section in the class.
+  /// A section report is restricted to the selected section.
+  /// Only published marks for active students are included.
   Future<Map<String, dynamic>> getPerformanceReport({
     required String schoolId,
     required String classId,
     String? sectionId,
   }) async {
     if (schoolId.trim().isEmpty || classId.trim().isEmpty) {
-      throw ArgumentError('School aur class required hain.');
+      throw ArgumentError('School ID and class are required.');
     }
 
+    final normalizedSchoolId = schoolId.trim();
+    final normalizedClassId = classId.trim();
+    final normalizedSectionId = sectionId?.trim();
+
     final studentsSnapshot = await _students
-        .where('schoolId', isEqualTo: schoolId)
-        .where('classId', isEqualTo: classId)
+        .where('schoolId', isEqualTo: normalizedSchoolId)
+        .where('classId', isEqualTo: normalizedClassId)
         .get();
 
     final allStudents = studentsSnapshot.docs
         .where((doc) => doc.data()['isActive'] != false)
         .where((doc) {
-          if (sectionId == null) return true;
-          return doc.data()['sectionId'] == sectionId;
+          if (normalizedSectionId == null || normalizedSectionId.isEmpty) {
+            return true;
+          }
+          return doc.data()['sectionId'] == normalizedSectionId;
         })
         .map((doc) => <String, dynamic>{
-              'id': doc.id,
               ...doc.data(),
+              'id': doc.id,
             })
         .toList();
 
     final studentIds = allStudents.map((s) => s['id'] as String).toSet();
+    final studentScopeById = <String, Map<String, dynamic>>{
+      for (final student in allStudents)
+        student['id'] as String: <String, dynamic>{
+          'classId': student['classId'],
+          'sectionId': student['sectionId'],
+        },
+    };
 
     if (studentIds.isEmpty) {
       return {
@@ -177,33 +179,46 @@ class SchoolReportsRepository {
     }
 
     final marksSnapshot = await _marks
-        .where('schoolId', isEqualTo: schoolId)
-        .where('classId', isEqualTo: classId)
+        .where('schoolId', isEqualTo: normalizedSchoolId)
+        .where('classId', isEqualTo: normalizedClassId)
         .get();
 
     final publishedMarks = marksSnapshot.docs
         .map((doc) => <String, dynamic>{
-              'id': doc.id,
               ...doc.data(),
+              'id': doc.id,
             })
         .where((mark) => mark['status'] == 'published')
         .where((mark) => studentIds.contains(mark['studentId']))
+        .where((mark) => mark['schoolId'] == normalizedSchoolId)
+        .where((mark) => mark['classId'] == normalizedClassId)
         .where((mark) {
-          if (sectionId == null) return true;
-          return mark['sectionId'] == sectionId;
+          final studentId = mark['studentId'];
+          if (studentId is! String) return false;
+          final studentScope = studentScopeById[studentId];
+          if (studentScope == null) return false;
+
+          // Prevent a mark for a student in Section A from being counted
+          // when the mark document incorrectly says Section B (and vice versa).
+          if (mark['classId'] != studentScope['classId'] ||
+              mark['sectionId'] != studentScope['sectionId']) {
+            return false;
+          }
+
+          if (normalizedSectionId == null || normalizedSectionId.isEmpty) {
+            return true;
+          }
+          return mark['sectionId'] == normalizedSectionId;
         })
         .where((mark) {
-          final obtained =
-              (mark['obtainedMarks'] as num?)?.toDouble() ?? 0;
-
+          final obtained = (mark['obtainedMarks'] as num?)?.toDouble() ?? 0;
           final total = (mark['totalMarks'] as num?)?.toDouble() ?? 0;
-
           return total > 0 && obtained >= 0 && obtained <= total;
         })
         .toList();
 
-    // Group subject totals by normalized subject name rather than subjectId,
-    // because a subject may have different document IDs in different sections.
+    // Keys are normalized subject names rather than subject IDs so the same
+    // subject can combine records from different sections with different IDs.
     final subjectTotals = <String, Map<String, dynamic>>{};
     final studentTotals = <String, Map<String, dynamic>>{};
 
@@ -212,17 +227,14 @@ class SchoolReportsRepository {
 
     for (final mark in publishedMarks) {
       final subjectId = (mark['subjectId'] as String? ?? '').trim();
-
-      final rawSubjectName =
-          (mark['subjectName'] as String? ?? '').trim();
-
+      final rawSubjectName = (mark['subjectName'] as String? ?? '').trim();
       final subjectName = _subjectDisplayName(rawSubjectName);
-
       final obtained = (mark['obtainedMarks'] as num).toDouble();
       final total = (mark['totalMarks'] as num).toDouble();
-      final studentId = mark['studentId'] as String;
+      final studentIdValue = mark['studentId'];
 
-      if (subjectId.isEmpty) continue;
+      if (subjectId.isEmpty || studentIdValue is! String) continue;
+      final studentId = studentIdValue;
 
       final subjectKey = _subjectGroupKey(subjectName);
 
@@ -237,19 +249,21 @@ class SchoolReportsRepository {
         };
       });
 
+      // Standardize known aliases in the report label.
+      if (subjectKey == 'math') {
+        subject['subjectName'] = 'Math';
+      }
+
       subject['obtainedMarks'] =
           (subject['obtainedMarks'] as double) + obtained;
-
-      subject['totalMarks'] =
-          (subject['totalMarks'] as double) + total;
-
+      subject['totalMarks'] = (subject['totalMarks'] as double) + total;
       (subject['studentIds'] as Set<String>).add(studentId);
-
       subject['testCount'] = (subject['testCount'] as int) + 1;
 
       final student = studentTotals.putIfAbsent(studentId, () {
-        final studentData =
-            allStudents.firstWhere((s) => s['id'] == studentId);
+        final studentData = allStudents.firstWhere(
+          (s) => s['id'] == studentId,
+        );
 
         return {
           'studentId': studentId,
@@ -262,13 +276,10 @@ class SchoolReportsRepository {
 
       student['obtainedMarks'] =
           (student['obtainedMarks'] as double) + obtained;
-
-      student['totalMarks'] =
-          (student['totalMarks'] as double) + total;
+      student['totalMarks'] = (student['totalMarks'] as double) + total;
 
       final studentSubjects =
           student['subjects'] as Map<String, Map<String, dynamic>>;
-
       final studentSubject = studentSubjects.putIfAbsent(subjectKey, () {
         return {
           'subjectId': subjectId,
@@ -278,9 +289,12 @@ class SchoolReportsRepository {
         };
       });
 
+      if (subjectKey == 'math') {
+        studentSubject['subjectName'] = 'Math';
+      }
+
       studentSubject['obtainedMarks'] =
           (studentSubject['obtainedMarks'] as double) + obtained;
-
       studentSubject['totalMarks'] =
           (studentSubject['totalMarks'] as double) + total;
 

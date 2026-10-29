@@ -1,4 +1,3 @@
-
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
   getFirestore,

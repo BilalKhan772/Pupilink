@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,6 +21,13 @@ class ClassPerformanceReportScreen extends ConsumerStatefulWidget {
 
 class _ClassPerformanceReportScreenState
     extends ConsumerState<ClassPerformanceReportScreen> {
+  static const Color _green = Color(0xFF138A4B);
+  static const Color _darkGreen = Color(0xFF105C3B);
+  static const Color _canvas = Color(0xFFF4F8F5);
+  static const Color _border = Color(0xFFDDE9E1);
+  static const Color _text = Color(0xFF202B25);
+  static const Color _muted = Color(0xFF68766E);
+
   late final SchoolReportsController _controller;
 
   @override
@@ -31,19 +37,15 @@ class _ClassPerformanceReportScreenState
     _controller = ref.read(
       schoolReportsControllerProvider(widget.schoolId),
     );
-
     _controller.addListener(_onControllerChanged);
 
     Future.microtask(() {
-      if (!mounted) return;
-      _controller.loadClasses();
+      if (mounted) _controller.loadClasses();
     });
   }
 
   void _onControllerChanged() {
-    if (!mounted) return;
-
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   @override
@@ -52,196 +54,494 @@ class _ClassPerformanceReportScreenState
     super.dispose();
   }
 
+  String _userFacingError(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return 'Something went wrong. Please try again.';
+    }
+
+    final value = raw.toLowerCase();
+
+    if (value.contains('permission-denied') ||
+        value.contains('permission')) {
+      return 'You do not have permission to access this report.';
+    }
+
+    if (value.contains('unavailable') || value.contains('network')) {
+      return 'The service is temporarily unavailable. Check your connection and try again.';
+    }
+
+    if (value.contains('classes load') || value.contains('class load')) {
+      return 'Unable to load classes. Please refresh and try again.';
+    }
+
+    if (value.contains('sections load') || value.contains('section load')) {
+      return 'Unable to load sections. Please select the class again.';
+    }
+
+    if (value.contains('class aur section') ||
+        value.contains('class select')) {
+      return 'Please select a class and section before generating this report.';
+    }
+
+    if (value.contains('school id') ||
+        value.contains('school aur class')) {
+      return 'The school or class information is missing. Please sign in again or contact your administrator.';
+    }
+
+    return 'Unable to generate the report. Please try again.';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final SchoolReportsState state = _controller.state;
+    final state = _controller.state;
+    final title =
+        widget.sectionMode ? 'Section Reports' : 'Class Overall Report';
 
     return Scaffold(
+      backgroundColor: _canvas,
       appBar: AppBar(
-        title: Text(
-          widget.sectionMode
-              ? 'Section Reports'
-              : 'Class Overall Report',
+        backgroundColor: Colors.white,
+        foregroundColor: _darkGreen,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        titleSpacing: 20,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: _darkGreen,
+                fontSize: 19,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              widget.sectionMode
+                  ? 'Review academic performance for a selected section'
+                  : 'Review combined academic performance across all sections',
+              style: const TextStyle(
+                color: _muted,
+                fontSize: 11,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: _border),
         ),
       ),
       body: state.isLoadingClasses
           ? const Center(
-              child: CircularProgressIndicator(),
+              child: CircularProgressIndicator(color: _green),
             )
-          : _buildBody(context, state, _controller),
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final horizontalPadding =
+                    constraints.maxWidth < 600 ? 16.0 : 24.0;
+
+                final maxContentWidth = constraints.maxWidth >= 1250
+                    ? 1180.0
+                    : constraints.maxWidth;
+
+                final contentInnerWidth =
+                    (maxContentWidth - horizontalPadding * 2)
+                        .clamp(0.0, double.infinity)
+                        .toDouble();
+
+                return Align(
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: maxContentWidth,
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPadding,
+                        22,
+                        horizontalPadding,
+                        36,
+                      ),
+                      children: [
+                        _buildFilterPanel(state, contentInnerWidth),
+                        if (state.errorMessage != null) ...[
+                          const SizedBox(height: 16),
+                          _ErrorBanner(
+                            message:
+                                _userFacingError(state.errorMessage),
+                            onRetry: _retry,
+                          ),
+                        ],
+                        if (state.isLoadingReport) ...[
+                          const SizedBox(height: 24),
+                          const _LoadingPanel(),
+                        ],
+                        if (!state.isLoadingReport && state.hasReport) ...[
+                          const SizedBox(height: 24),
+                          _buildSummary(state, contentInnerWidth),
+                          const SizedBox(height: 28),
+                          _buildSectionHeading(
+                            title: 'Subject Performance',
+                            subtitle: 'Combined results from published marks',
+                            count: state.subjectReports.length,
+                          ),
+                          const SizedBox(height: 12),
+                          if (state.subjectReports.isEmpty)
+                            const _EmptyReport(
+                              title: 'No Subject Results',
+                              message:
+                                  'Published marks are not available for this selection yet.',
+                            )
+                          else
+                            ...state.subjectReports.map(
+                              (subject) =>
+                                  _SubjectReportCard(subject: subject),
+                            ),
+                          const SizedBox(height: 28),
+                          _buildSectionHeading(
+                            title: 'Student Performance',
+                            subtitle:
+                                'Overall marks for each student in the selected scope',
+                            count: state.studentReports.length,
+                          ),
+                          const SizedBox(height: 12),
+                          if (state.studentReports.isEmpty)
+                            const _EmptyReport(
+                              title: 'No Student Results',
+                              message:
+                                  'There are no published marks to display for these students.',
+                            )
+                          else
+                            ...state.studentReports.map(
+                              (student) =>
+                                  _StudentReportCard(student: student),
+                            ),
+                        ] else if (!state.isLoadingReport &&
+                            !state.hasReport &&
+                            state.errorMessage == null) ...[
+                          const SizedBox(height: 24),
+                          const _EmptyReport(
+                            title: 'Ready to Generate a Report',
+                            message:
+                                'Select a class and generate the report to view subject and student performance.',
+                            icon: Icons.assessment_outlined,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 
-  Widget _buildBody(
-    BuildContext context,
+  Widget _buildFilterPanel(
     SchoolReportsState state,
-    SchoolReportsController controller,
+    double availableWidth,
   ) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        DropdownButtonFormField<String>(
-          initialValue: state.selectedClassId,
-          decoration: const InputDecoration(
-            labelText: 'Select Class',
-            border: OutlineInputBorder(),
+    final selectedClassId =
+        state.classes.any((c) => c.id == state.selectedClassId)
+            ? state.selectedClassId
+            : null;
+
+    final selectedSectionId = state.sections.any(
+      (s) => (s['id'] as String? ?? '') == state.selectedSectionId,
+    )
+        ? state.selectedSectionId
+        : null;
+
+    final wide = availableWidth >= 720;
+
+    final fieldWidth = wide
+        ? widget.sectionMode
+            ? (availableWidth - 16) / 2
+            : availableWidth
+        : availableWidth;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF163B28).withValues(alpha: 0.035),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
-          items: state.classes.map((schoolClass) {
-            return DropdownMenuItem<String>(
-              value: schoolClass.id,
-              child: Text(schoolClass.name),
-            );
-          }).toList(),
-          onChanged: (value) {
-            if (value != null) {
-              controller.selectClass(value);
-            }
-          },
-        ),
-
-        if (widget.sectionMode) ...[
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.tune_rounded, color: _green, size: 21),
+              SizedBox(width: 9),
+              Text(
+                'Report Filters',
+                style: TextStyle(
+                  color: _text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
-
-          DropdownButtonFormField<String>(
-            initialValue: state.selectedSectionId,
-            decoration: const InputDecoration(
-              labelText: 'Select Section',
-              border: OutlineInputBorder(),
-            ),
-            items: state.sections.map((section) {
-              final sectionId = section['id'] as String? ?? '';
-
-              final sectionName =
-                  section['name'] as String? ??
-                  section['sectionName'] as String? ??
-                  'Unnamed Section';
-
-              if (sectionId.isEmpty) {
-                return null;
-              }
-
-              return DropdownMenuItem<String>(
-                value: sectionId,
-                child: Text(sectionName),
-              );
-            }).whereType<DropdownMenuItem<String>>().toList(),
-            onChanged: state.isLoadingSections
-                ? null
-                : (value) {
+          Wrap(
+            spacing: 16,
+            runSpacing: 14,
+            children: [
+              SizedBox(
+                width: fieldWidth,
+                child: DropdownButtonFormField<String>(
+                  initialValue: selectedClassId,
+                  isExpanded: true,
+                  decoration: _inputDecoration(
+                    label: 'Select Class',
+                    icon: Icons.school_outlined,
+                  ),
+                  items: state.classes.map((schoolClass) {
+                    return DropdownMenuItem<String>(
+                      value: schoolClass.id,
+                      child: Text(
+                        schoolClass.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
                     if (value != null) {
-                      controller.selectSection(value);
+                      _controller.selectClass(value);
                     }
                   },
+                ),
+              ),
+              if (widget.sectionMode)
+                SizedBox(
+                  width: fieldWidth,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: selectedSectionId,
+                    isExpanded: true,
+                    decoration: _inputDecoration(
+                      label: 'Select Section',
+                      icon: Icons.grid_view_rounded,
+                    ),
+                    items: state.sections.map((section) {
+                      final sectionId =
+                          section['id'] as String? ?? '';
+
+                      final sectionName =
+                          section['name'] as String? ??
+                              section['sectionName'] as String? ??
+                              'Unnamed Section';
+
+                      if (sectionId.isEmpty) return null;
+
+                      return DropdownMenuItem<String>(
+                        value: sectionId,
+                        child: Text(
+                          sectionName,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).whereType<DropdownMenuItem<String>>().toList(),
+                    onChanged: state.isLoadingSections
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              _controller.selectSection(value);
+                            }
+                          },
+                  ),
+                ),
+            ],
           ),
-
-          if (state.isLoadingSections)
-            const Padding(
-              padding: EdgeInsets.only(top: 12),
-              child: LinearProgressIndicator(),
+          if (state.isLoadingSections) ...[
+            const SizedBox(height: 14),
+            const LinearProgressIndicator(
+              minHeight: 3,
+              color: _green,
+              backgroundColor: Color(0xFFDCEBE1),
             ),
-        ],
-
-        const SizedBox(height: 20),
-
-        FilledButton.icon(
-          onPressed: state.isLoadingReport
-              ? null
-              : () {
-                  if (widget.sectionMode) {
-                    controller.loadSectionReport();
-                  } else {
-                    controller.loadClassReport();
-                  }
-                },
-          icon: const Icon(Icons.assessment_outlined),
-          label: const Text('Generate Report'),
-        ),
-
-        if (state.errorMessage != null) ...[
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              state.errorMessage!,
-              style: const TextStyle(
-                color: Colors.red,
+          ],
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: _green,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: state.isLoadingReport ||
+                      state.selectedClassId == null ||
+                      (widget.sectionMode &&
+                          state.selectedSectionId == null)
+                  ? null
+                  : () {
+                      if (widget.sectionMode) {
+                        _controller.loadSectionReport();
+                      } else {
+                        _controller.loadClassReport();
+                      }
+                    },
+              icon: const Icon(Icons.analytics_outlined, size: 20),
+              label: Text(
+                state.isLoadingReport
+                    ? 'Generating Report...'
+                    : 'Generate Report',
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
 
-        if (state.isLoadingReport)
-          const Padding(
-            padding: EdgeInsets.all(30),
-            child: Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
+  Widget _buildSummary(
+    SchoolReportsState state,
+    double availableWidth,
+  ) {
+    final twoColumns = availableWidth >= 720;
+    final cardWidth =
+        twoColumns ? (availableWidth - 12) / 2 : availableWidth;
 
-        if (!state.isLoadingReport && state.hasReport) ...[
-          const SizedBox(height: 24),
-
-          _SummaryCard(
-            title: 'Students in selected scope',
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        SizedBox(
+          width: cardWidth,
+          child: _SummaryCard(
+            title: 'Students in Selected Scope',
             value: '${state.studentCount}',
             subtitle: 'Active students',
+            icon: Icons.groups_2_outlined,
           ),
-
-          const SizedBox(height: 12),
-
-          _SummaryCard(
+        ),
+        SizedBox(
+          width: cardWidth,
+          child: _SummaryCard(
             title: 'Combined Overall Percentage',
-            value:
-                '${state.overallPercentage.toStringAsFixed(2)}%',
-            subtitle: 'Based on published marks',
+            value: '${state.overallPercentage.toStringAsFixed(1)}%',
+            subtitle: null,
+            icon: Icons.track_changes_outlined,
+            percentage: state.overallPercentage,
           ),
-
-          const SizedBox(height: 24),
-
-          Text(
-            'Subject-wise Performance',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-
-          const SizedBox(height: 12),
-
-          if (state.subjectReports.isEmpty)
-            const _EmptyReport()
-          else
-            ...state.subjectReports.map(
-              (subject) => _SubjectReportCard(
-                subject: subject,
-              ),
-            ),
-
-          const SizedBox(height: 24),
-
-          Text(
-            'Student Performance',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-
-          const SizedBox(height: 12),
-
-          if (state.studentReports.isEmpty)
-            const _EmptyReport()
-          else
-            ...state.studentReports.map(
-              (student) => _StudentReportCard(
-                student: student,
-              ),
-            ),
-        ],
+        ),
       ],
     );
+  }
+
+  Widget _buildSectionHeading({
+    required String title,
+    required String subtitle,
+    required int count,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: _text,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 6,
+          ),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE4F3E9),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Text(
+            '$count',
+            style: const TextStyle(
+              color: _darkGreen,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  InputDecoration _inputDecoration({
+    required String label,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, color: _green, size: 20),
+      filled: true,
+      fillColor: const Color(0xFFFBFDFC),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 16,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(
+          color: _green,
+          width: 1.5,
+        ),
+      ),
+    );
+  }
+
+  void _retry() {
+    if (widget.sectionMode) {
+      if (_controller.state.selectedClassId != null) {
+        _controller.selectClass(
+          _controller.state.selectedClassId!,
+        );
+      } else {
+        _controller.loadClasses();
+      }
+    } else if (_controller.state.selectedClassId != null) {
+      _controller.loadClassReport();
+    } else {
+      _controller.loadClasses();
+    }
   }
 }
 
@@ -249,95 +549,213 @@ class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
     required this.title,
     required this.value,
-    required this.subtitle,
+    this.subtitle,
+    required this.icon,
+    this.percentage,
   });
 
   final String title;
   final String value;
-  final String subtitle;
+  final String? subtitle;
+  final IconData icon;
+  final double? percentage;
+
+  static const Color _green = Color(0xFF138A4B);
+  static const Color _darkGreen = Color(0xFF105C3B);
+  static const Color _border = Color(0xFFDDE9E1);
+  static const Color _muted = Color(0xFF68766E);
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+    final progress =
+        ((percentage ?? 0) / 100).clamp(0.0, 1.0).toDouble();
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF163B28).withValues(alpha: 0.03),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE5F3E9),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: _darkGreen,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: _muted,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            value,
+            style: const TextStyle(
+              color: _darkGreen,
+              fontSize: 28,
+              height: 1.1,
+              fontWeight: FontWeight.w800,
             ),
-            const SizedBox(height: 4),
+          ),
+
+          // Only show a subtitle when one is provided.
+          // This removes the marks/published-record text from the
+          // Combined Overall Percentage card without affecting
+          // the Active Students subtitle.
+          if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+            const SizedBox(height: 7),
             Text(
-              subtitle,
-              style: Theme.of(context).textTheme.bodySmall,
+              subtitle!,
+              style: const TextStyle(
+                color: _muted,
+                fontSize: 12,
+                height: 1.4,
+              ),
             ),
           ],
-        ),
+
+          if (percentage != null) ...[
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 7,
+                color: _green,
+                backgroundColor: const Color(0xFFDCEBE1),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 }
 
 class _SubjectReportCard extends StatelessWidget {
-  const _SubjectReportCard({
-    required this.subject,
-  });
+  const _SubjectReportCard({required this.subject});
 
   final Map<String, dynamic> subject;
+
+  static const Color _green = Color(0xFF4CAF50);
+  static const Color _darkGreen = Color(0xFF105C3B);
+  static const Color _border = Color(0xFFDDE9E1);
 
   @override
   Widget build(BuildContext context) {
     final percentage =
         (subject['percentage'] as num?)?.toDouble() ?? 0;
 
-    final obtained =
-        (subject['obtainedMarks'] as num?)?.toDouble() ?? 0;
+    final progress =
+        (percentage / 100).clamp(0.0, 1.0).toDouble();
 
-    final total =
-        (subject['totalMarks'] as num?)?.toDouble() ?? 0;
-
-    final studentCount =
-        (subject['studentCount'] as num?)?.toInt() ?? 0;
-
-    return Card(
-      child: ListTile(
-        leading: const CircleAvatar(
-          child: Icon(Icons.menu_book_outlined),
-        ),
-        title: Text(
-          subject['subjectName'] as String? ?? 'Subject',
-        ),
-        subtitle: Text(
-          '${obtained.toStringAsFixed(1)} / '
-          '${total.toStringAsFixed(1)} marks'
-          ' • $studentCount students with marks',
-        ),
-        trailing: Text(
-          '${percentage.toStringAsFixed(1)}%',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF163B28).withValues(alpha: 0.025),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFFE5F2E8),
+                ),
+                child: const Icon(
+                  Icons.menu_book_rounded,
+                  color: _green,
+                  size: 22,
+                ),
               ),
-        ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  subject['subjectName'] as String? ?? 'Subject',
+                  style: const TextStyle(
+                    color: Color(0xFF222B25),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '${percentage.toStringAsFixed(1)}%',
+                style: const TextStyle(
+                  color: _green,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 7,
+              color: _green,
+              backgroundColor: const Color(0xFFDCEBE1),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _StudentReportCard extends StatelessWidget {
-  const _StudentReportCard({
-    required this.student,
-  });
+  const _StudentReportCard({required this.student});
 
   final Map<String, dynamic> student;
+
+  static const Color _green = Color(0xFF4CAF50);
+  static const Color _darkGreen = Color(0xFF105C3B);
+  static const Color _border = Color(0xFFDDE9E1);
+  static const Color _muted = Color(0xFF657168);
 
   @override
   Widget build(BuildContext context) {
@@ -350,36 +768,225 @@ class _StudentReportCard extends StatelessWidget {
     final total =
         (student['totalMarks'] as num?)?.toDouble() ?? 0;
 
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.person_outline),
-        title: Text(
-          student['studentName'] as String? ?? 'Student',
-        ),
-        subtitle: Text(
-          '${obtained.toStringAsFixed(1)} / '
-          '${total.toStringAsFixed(1)} marks',
-        ),
-        trailing: Text(
-          '${percentage.toStringAsFixed(1)}%',
-        ),
+    final progress =
+        (percentage / 100).clamp(0.0, 1.0).toDouble();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFFF0F5F1),
+                ),
+                child: const Icon(
+                  Icons.person_outline_rounded,
+                  color: _darkGreen,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      student['studentName'] as String? ?? 'Student',
+                      style: const TextStyle(
+                        color: Color(0xFF222B25),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_formatMarks(obtained)} / ${_formatMarks(total)} marks',
+                      style: const TextStyle(
+                        color: _muted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '${percentage.toStringAsFixed(1)}%',
+                style: const TextStyle(
+                  color: _green,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              color: _green,
+              backgroundColor: const Color(0xFFDCEBE1),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _EmptyReport extends StatelessWidget {
-  const _EmptyReport();
+  const _EmptyReport({
+    required this.title,
+    required this.message,
+    this.icon = Icons.menu_book_outlined,
+  });
+
+  final String title;
+  final String message;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
-      child: Padding(
-        padding: EdgeInsets.all(18),
-        child: Text(
-          'Abhi is selection ke liye published marks available nahi hain.',
-        ),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: const Color(0xFFDDE9E1)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(
+              color: Color(0xFFE5F3E9),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: const Color(0xFF105C3B),
+              size: 27,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF202B25),
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF68766E),
+              fontSize: 12,
+              height: 1.5,
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1F0),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: const Color(0xFFF3C6C2)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Color(0xFFB42318),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFF912018),
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: onRetry,
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoadingPanel extends StatelessWidget {
+  const _LoadingPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDDE9E1)),
+      ),
+      child: const Column(
+        children: [
+          CircularProgressIndicator(color: Color(0xFF138A4B)),
+          SizedBox(height: 14),
+          Text(
+            'Generating report...',
+            style: TextStyle(
+              color: Color(0xFF105C3B),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatMarks(double value) {
+  if (value == value.roundToDouble()) {
+    return value.toInt().toString();
+  }
+
+  return value.toStringAsFixed(1);
 }
