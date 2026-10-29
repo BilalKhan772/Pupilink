@@ -58,44 +58,36 @@ class _ClassPerformanceReportScreenState
     if (raw == null || raw.trim().isEmpty) {
       return 'Something went wrong. Please try again.';
     }
-
     final value = raw.toLowerCase();
-
-    if (value.contains('permission-denied') ||
-        value.contains('permission')) {
+    if (value.contains('permission-denied') || value.contains('permission')) {
       return 'You do not have permission to access this report.';
     }
-
     if (value.contains('unavailable') || value.contains('network')) {
       return 'The service is temporarily unavailable. Check your connection and try again.';
     }
-
     if (value.contains('classes load') || value.contains('class load')) {
       return 'Unable to load classes. Please refresh and try again.';
     }
-
     if (value.contains('sections load') || value.contains('section load')) {
       return 'Unable to load sections. Please select the class again.';
     }
-
-    if (value.contains('class aur section') ||
-        value.contains('class select')) {
+    if (value.contains('class aur section') || value.contains('class select')) {
       return 'Please select a class and section before generating this report.';
     }
-
-    if (value.contains('school id') ||
-        value.contains('school aur class')) {
+    if (value.contains('school id') || value.contains('school aur class')) {
       return 'The school or class information is missing. Please sign in again or contact your administrator.';
     }
-
     return 'Unable to generate the report. Please try again.';
   }
 
   @override
   Widget build(BuildContext context) {
     final state = _controller.state;
-    final title =
-        widget.sectionMode ? 'Section Reports' : 'Class Overall Report';
+    // Resolve report lists once per build rather than creating repeated copies
+    // through the state getters while constructing a long report.
+    final subjectReports = state.subjectReports;
+    final studentReports = state.studentReports;
+    final title = widget.sectionMode ? 'Section Reports' : 'Class Overall Report';
 
     return Scaffold(
       backgroundColor: _canvas,
@@ -135,100 +127,142 @@ class _ClassPerformanceReportScreenState
         ),
       ),
       body: state.isLoadingClasses
-          ? const Center(
-              child: CircularProgressIndicator(color: _green),
-            )
+          ? const Center(child: CircularProgressIndicator(color: _green))
           : LayoutBuilder(
               builder: (context, constraints) {
-                final horizontalPadding =
-                    constraints.maxWidth < 600 ? 16.0 : 24.0;
-
+                final horizontalPadding = constraints.maxWidth < 600 ? 16.0 : 24.0;
                 final maxContentWidth = constraints.maxWidth >= 1250
                     ? 1180.0
                     : constraints.maxWidth;
-
                 final contentInnerWidth =
-                    (maxContentWidth - horizontalPadding * 2)
-                        .clamp(0.0, double.infinity)
-                        .toDouble();
+                    (maxContentWidth - horizontalPadding * 2).clamp(0.0, double.infinity).toDouble();
+
+                // Keep the same report content, but build long report lists
+                // lazily. This reduces work when a class has hundreds of students.
+                final itemBuilders = <WidgetBuilder>[];
+
+                void addWidget(Widget widget) {
+                  itemBuilders.add((_) => widget);
+                }
+
+                void addBuilder(WidgetBuilder builder) {
+                  itemBuilders.add(builder);
+                }
+
+                addWidget(const SizedBox(height: 22));
+                addWidget(_buildFilterPanel(state, contentInnerWidth));
+
+                if (state.errorMessage != null) {
+                  addWidget(const SizedBox(height: 16));
+                  addWidget(
+                    _ErrorBanner(
+                      message: _userFacingError(state.errorMessage),
+                      onRetry: _retry,
+                    ),
+                  );
+                }
+
+                if (state.isLoadingReport) {
+                  addWidget(const SizedBox(height: 24));
+                  addWidget(const _LoadingPanel());
+                }
+
+                if (!state.isLoadingReport && state.hasReport) {
+                  addWidget(const SizedBox(height: 24));
+                  addWidget(_buildSummary(state, contentInnerWidth));
+                  addWidget(const SizedBox(height: 28));
+                  addWidget(
+                    _buildSectionHeading(
+                      title: 'Subject Performance',
+                      subtitle: 'Combined results from published marks',
+                      count: subjectReports.length,
+                    ),
+                  );
+                  addWidget(const SizedBox(height: 12));
+
+                  if (subjectReports.isEmpty) {
+                    addWidget(
+                      const _EmptyReport(
+                        title: 'No Subject Results',
+                        message: 'Published marks are not available for this selection yet.',
+                      ),
+                    );
+                  } else {
+                    for (final subject in subjectReports) {
+                      addBuilder(
+                        (_) => _SubjectReportCard(subject: subject),
+                      );
+                    }
+                  }
+
+                  addWidget(const SizedBox(height: 28));
+                  addWidget(
+                    _buildSectionHeading(
+                      title: 'Student Performance',
+                      subtitle: 'Overall marks for each student in the selected scope',
+                      count: studentReports.length,
+                    ),
+                  );
+                  addWidget(const SizedBox(height: 12));
+
+                  if (studentReports.isEmpty) {
+                    addWidget(
+                      const _EmptyReport(
+                        title: 'No Student Results',
+                        message: 'There are no published marks to display for these students.',
+                      ),
+                    );
+                  } else {
+                    // Rank by total obtained marks in the UI so this report
+                    // does not depend on the ordering used elsewhere.
+                    // Student cards are still instantiated lazily by ListView.builder.
+                    final rankedStudents = _rankStudents(studentReports);
+                    for (var index = 0; index < rankedStudents.length; index++) {
+                      final student = rankedStudents[index];
+                      final rank = index + 1;
+                      addBuilder(
+                        (_) => _StudentReportCard(
+                          key: ValueKey(
+                            'student-report-${student['studentId'] ?? student['id'] ?? rank}',
+                          ),
+                          student: student,
+                          rank: rank,
+                          showSection: !widget.sectionMode,
+                        ),
+                      );
+                    }
+                  }
+                } else if (!state.isLoadingReport &&
+                    !state.hasReport &&
+                    state.errorMessage == null) {
+                  addWidget(const SizedBox(height: 24));
+                  addWidget(
+                    const _EmptyReport(
+                      title: 'Ready to Generate a Report',
+                      message: 'Select a class and generate the report to view subject and student performance.',
+                      icon: Icons.assessment_outlined,
+                    ),
+                  );
+                }
+
+                addWidget(const SizedBox(height: 36));
 
                 return Align(
                   alignment: Alignment.topCenter,
                   child: SizedBox(
                     width: maxContentWidth,
-                    child: ListView(
-                      padding: EdgeInsets.fromLTRB(
-                        horizontalPadding,
-                        22,
-                        horizontalPadding,
-                        36,
+                    child: ListView.builder(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: horizontalPadding,
                       ),
-                      children: [
-                        _buildFilterPanel(state, contentInnerWidth),
-                        if (state.errorMessage != null) ...[
-                          const SizedBox(height: 16),
-                          _ErrorBanner(
-                            message:
-                                _userFacingError(state.errorMessage),
-                            onRetry: _retry,
-                          ),
-                        ],
-                        if (state.isLoadingReport) ...[
-                          const SizedBox(height: 24),
-                          const _LoadingPanel(),
-                        ],
-                        if (!state.isLoadingReport && state.hasReport) ...[
-                          const SizedBox(height: 24),
-                          _buildSummary(state, contentInnerWidth),
-                          const SizedBox(height: 28),
-                          _buildSectionHeading(
-                            title: 'Subject Performance',
-                            subtitle: 'Combined results from published marks',
-                            count: state.subjectReports.length,
-                          ),
-                          const SizedBox(height: 12),
-                          if (state.subjectReports.isEmpty)
-                            const _EmptyReport(
-                              title: 'No Subject Results',
-                              message:
-                                  'Published marks are not available for this selection yet.',
-                            )
-                          else
-                            ...state.subjectReports.map(
-                              (subject) =>
-                                  _SubjectReportCard(subject: subject),
-                            ),
-                          const SizedBox(height: 28),
-                          _buildSectionHeading(
-                            title: 'Student Performance',
-                            subtitle:
-                                'Overall marks for each student in the selected scope',
-                            count: state.studentReports.length,
-                          ),
-                          const SizedBox(height: 12),
-                          if (state.studentReports.isEmpty)
-                            const _EmptyReport(
-                              title: 'No Student Results',
-                              message:
-                                  'There are no published marks to display for these students.',
-                            )
-                          else
-                            ...state.studentReports.map(
-                              (student) =>
-                                  _StudentReportCard(student: student),
-                            ),
-                        ] else if (!state.isLoadingReport &&
-                            !state.hasReport &&
-                            state.errorMessage == null) ...[
-                          const SizedBox(height: 24),
-                          const _EmptyReport(
-                            title: 'Ready to Generate a Report',
-                            message:
-                                'Select a class and generate the report to view subject and student performance.',
-                            icon: Icons.assessment_outlined,
-                          ),
-                        ],
-                      ],
+                      itemCount: itemBuilders.length,
+                      itemBuilder: (context, index) =>
+                          itemBuilders[index](context),
+                      // Lazy list creation makes scrolling smoother for classes
+                      // with 150–300+ students without adding more loading calls.
+                      cacheExtent: 500,
+                      addAutomaticKeepAlives: false,
+                      addRepaintBoundaries: true,
                     ),
                   ),
                 );
@@ -237,23 +271,61 @@ class _ClassPerformanceReportScreenState
     );
   }
 
-  Widget _buildFilterPanel(
-    SchoolReportsState state,
-    double availableWidth,
+  /// Rank students by raw total obtained marks, highest first.
+  /// Percentage and student name are deterministic tie-breakers.
+  List<Map<String, dynamic>> _rankStudents(
+    List<Map<String, dynamic>> students,
   ) {
-    final selectedClassId =
-        state.classes.any((c) => c.id == state.selectedClassId)
-            ? state.selectedClassId
-            : null;
+    final ranked = List<Map<String, dynamic>>.of(students);
 
+    double readNumber(Map<String, dynamic> student, String key) {
+      final value = student[key];
+      return value is num ? value.toDouble() : 0.0;
+    }
+
+    double percentageOf(Map<String, dynamic> student) {
+      final explicitPercentage = student['percentage'];
+      if (explicitPercentage is num) {
+        return explicitPercentage.toDouble();
+      }
+
+      final obtained = readNumber(student, 'obtainedMarks');
+      final total = readNumber(student, 'totalMarks');
+      return total > 0 ? obtained / total * 100 : 0.0;
+    }
+
+    ranked.sort((a, b) {
+      // First, rank by obtained marks (not percentage).
+      final marksComparison = readNumber(b, 'obtainedMarks').compareTo(
+        readNumber(a, 'obtainedMarks'),
+      );
+      if (marksComparison != 0) return marksComparison;
+
+      // When the obtained marks tie, higher percentage comes first.
+      final percentageComparison = percentageOf(b).compareTo(
+        percentageOf(a),
+      );
+      if (percentageComparison != 0) return percentageComparison;
+
+      // Stable, deterministic final tie-breaker.
+      final nameA = (a['studentName'] as String? ?? '').toLowerCase();
+      final nameB = (b['studentName'] as String? ?? '').toLowerCase();
+      return nameA.compareTo(nameB);
+    });
+
+    return ranked;
+  }
+
+  Widget _buildFilterPanel(SchoolReportsState state, double availableWidth) {
+    final selectedClassId = state.classes.any((c) => c.id == state.selectedClassId)
+        ? state.selectedClassId
+        : null;
     final selectedSectionId = state.sections.any(
       (s) => (s['id'] as String? ?? '') == state.selectedSectionId,
     )
         ? state.selectedSectionId
         : null;
-
     final wide = availableWidth >= 720;
-
     final fieldWidth = wide
         ? widget.sectionMode
             ? (availableWidth - 16) / 2
@@ -308,16 +380,11 @@ class _ClassPerformanceReportScreenState
                   items: state.classes.map((schoolClass) {
                     return DropdownMenuItem<String>(
                       value: schoolClass.id,
-                      child: Text(
-                        schoolClass.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(schoolClass.name, overflow: TextOverflow.ellipsis),
                     );
                   }).toList(),
                   onChanged: (value) {
-                    if (value != null) {
-                      _controller.selectClass(value);
-                    }
+                    if (value != null) _controller.selectClass(value);
                   },
                 ),
               ),
@@ -332,30 +399,20 @@ class _ClassPerformanceReportScreenState
                       icon: Icons.grid_view_rounded,
                     ),
                     items: state.sections.map((section) {
-                      final sectionId =
-                          section['id'] as String? ?? '';
-
-                      final sectionName =
-                          section['name'] as String? ??
-                              section['sectionName'] as String? ??
-                              'Unnamed Section';
-
+                      final sectionId = section['id'] as String? ?? '';
+                      final sectionName = section['name'] as String? ??
+                          section['sectionName'] as String? ??
+                          'Unnamed Section';
                       if (sectionId.isEmpty) return null;
-
                       return DropdownMenuItem<String>(
                         value: sectionId,
-                        child: Text(
-                          sectionName,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        child: Text(sectionName, overflow: TextOverflow.ellipsis),
                       );
                     }).whereType<DropdownMenuItem<String>>().toList(),
                     onChanged: state.isLoadingSections
                         ? null
                         : (value) {
-                            if (value != null) {
-                              _controller.selectSection(value);
-                            }
+                            if (value != null) _controller.selectSection(value);
                           },
                   ),
                 ),
@@ -383,8 +440,7 @@ class _ClassPerformanceReportScreenState
               ),
               onPressed: state.isLoadingReport ||
                       state.selectedClassId == null ||
-                      (widget.sectionMode &&
-                          state.selectedSectionId == null)
+                      (widget.sectionMode && state.selectedSectionId == null)
                   ? null
                   : () {
                       if (widget.sectionMode) {
@@ -395,9 +451,7 @@ class _ClassPerformanceReportScreenState
                     },
               icon: const Icon(Icons.analytics_outlined, size: 20),
               label: Text(
-                state.isLoadingReport
-                    ? 'Generating Report...'
-                    : 'Generate Report',
+                state.isLoadingReport ? 'Generating Report...' : 'Generate Report',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
@@ -407,13 +461,11 @@ class _ClassPerformanceReportScreenState
     );
   }
 
-  Widget _buildSummary(
-    SchoolReportsState state,
-    double availableWidth,
-  ) {
+  Widget _buildSummary(SchoolReportsState state, double availableWidth) {
+    final overallObtained = (state.report['overallObtainedMarks'] as num?)?.toDouble() ?? 0;
+    final overallTotal = (state.report['overallTotalMarks'] as num?)?.toDouble() ?? 0;
     final twoColumns = availableWidth >= 720;
-    final cardWidth =
-        twoColumns ? (availableWidth - 12) / 2 : availableWidth;
+    final cardWidth = twoColumns ? (availableWidth - 12) / 2 : availableWidth;
 
     return Wrap(
       spacing: 12,
@@ -465,21 +517,14 @@ class _ClassPerformanceReportScreenState
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: const TextStyle(
-                  color: _muted,
-                  fontSize: 12,
-                  height: 1.4,
-                ),
+                style: const TextStyle(color: _muted, fontSize: 12, height: 1.4),
               ),
             ],
           ),
         ),
         const SizedBox(width: 8),
         Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 6,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: const Color(0xFFE4F3E9),
             borderRadius: BorderRadius.circular(24),
@@ -506,10 +551,7 @@ class _ClassPerformanceReportScreenState
       prefixIcon: Icon(icon, color: _green, size: 20),
       filled: true,
       fillColor: const Color(0xFFFBFDFC),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 16,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: _border),
@@ -520,10 +562,7 @@ class _ClassPerformanceReportScreenState
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(
-          color: _green,
-          width: 1.5,
-        ),
+        borderSide: const BorderSide(color: _green, width: 1.5),
       ),
     );
   }
@@ -531,9 +570,7 @@ class _ClassPerformanceReportScreenState
   void _retry() {
     if (widget.sectionMode) {
       if (_controller.state.selectedClassId != null) {
-        _controller.selectClass(
-          _controller.state.selectedClassId!,
-        );
+        _controller.selectClass(_controller.state.selectedClassId!);
       } else {
         _controller.loadClasses();
       }
@@ -567,8 +604,7 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress =
-        ((percentage ?? 0) / 100).clamp(0.0, 1.0).toDouble();
+    final progress = ((percentage ?? 0) / 100).clamp(0.0, 1.0).toDouble();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -596,11 +632,7 @@ class _SummaryCard extends StatelessWidget {
                   color: const Color(0xFFE5F3E9),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  icon,
-                  color: _darkGreen,
-                  size: 22,
-                ),
+                child: Icon(icon, color: _darkGreen, size: 22),
               ),
               const SizedBox(width: 11),
               Expanded(
@@ -625,23 +657,13 @@ class _SummaryCard extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
-
-          // Only show a subtitle when one is provided.
-          // This removes the marks/published-record text from the
-          // Combined Overall Percentage card without affecting
-          // the Active Students subtitle.
           if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
             const SizedBox(height: 7),
             Text(
               subtitle!,
-              style: const TextStyle(
-                color: _muted,
-                fontSize: 12,
-                height: 1.4,
-              ),
+              style: const TextStyle(color: _muted, fontSize: 12, height: 1.4),
             ),
           ],
-
           if (percentage != null) ...[
             const SizedBox(height: 16),
             ClipRRect(
@@ -668,14 +690,12 @@ class _SubjectReportCard extends StatelessWidget {
   static const Color _green = Color(0xFF4CAF50);
   static const Color _darkGreen = Color(0xFF105C3B);
   static const Color _border = Color(0xFFDDE9E1);
+  static const Color _muted = Color(0xFF657168);
 
   @override
   Widget build(BuildContext context) {
-    final percentage =
-        (subject['percentage'] as num?)?.toDouble() ?? 0;
-
-    final progress =
-        (percentage / 100).clamp(0.0, 1.0).toDouble();
+    final percentage = (subject['percentage'] as num?)?.toDouble() ?? 0;
+    final progress = (percentage / 100).clamp(0.0, 1.0).toDouble();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -703,21 +723,22 @@ class _SubjectReportCard extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: Color(0xFFE5F2E8),
                 ),
-                child: const Icon(
-                  Icons.menu_book_rounded,
-                  color: _green,
-                  size: 22,
-                ),
+                child: const Icon(Icons.menu_book_rounded, color: _green, size: 22),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  subject['subjectName'] as String? ?? 'Subject',
-                  style: const TextStyle(
-                    color: Color(0xFF222B25),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      subject['subjectName'] as String? ?? 'Subject',
+                      style: const TextStyle(
+                        color: Color(0xFF222B25),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 10),
@@ -748,9 +769,16 @@ class _SubjectReportCard extends StatelessWidget {
 }
 
 class _StudentReportCard extends StatelessWidget {
-  const _StudentReportCard({required this.student});
+  const _StudentReportCard({
+    super.key,
+    required this.student,
+    required this.rank,
+    required this.showSection,
+  });
 
   final Map<String, dynamic> student;
+  final int rank;
+  final bool showSection;
 
   static const Color _green = Color(0xFF4CAF50);
   static const Color _darkGreen = Color(0xFF105C3B);
@@ -759,17 +787,11 @@ class _StudentReportCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final percentage =
-        (student['percentage'] as num?)?.toDouble() ?? 0;
-
-    final obtained =
-        (student['obtainedMarks'] as num?)?.toDouble() ?? 0;
-
-    final total =
-        (student['totalMarks'] as num?)?.toDouble() ?? 0;
-
-    final progress =
-        (percentage / 100).clamp(0.0, 1.0).toDouble();
+    final percentage = (student['percentage'] as num?)?.toDouble() ?? 0;
+    final obtained = (student['obtainedMarks'] as num?)?.toDouble() ?? 0;
+    final total = (student['totalMarks'] as num?)?.toDouble() ?? 0;
+    final progress = (percentage / 100).clamp(0.0, 1.0).toDouble();
+    final sectionName = (student['sectionName'] as String? ?? '').trim();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -778,21 +800,39 @@ class _StudentReportCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF163B28).withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
                 width: 38,
                 height: 38,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Color(0xFFF0F5F1),
+                  color: rank == 1
+                      ? const Color(0xFFDDF2E4)
+                      : const Color(0xFFF0F5F1),
+                  border: rank == 1
+                      ? Border.all(color: const Color(0xFFB7DFC5))
+                      : null,
                 ),
-                child: const Icon(
-                  Icons.person_outline_rounded,
-                  color: _darkGreen,
+                alignment: Alignment.center,
+                child: Text(
+                  '$rank',
+                  style: TextStyle(
+                    color: rank == 1 ? _darkGreen : _muted,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
               const SizedBox(width: 11),
@@ -811,11 +851,20 @@ class _StudentReportCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '${_formatMarks(obtained)} / ${_formatMarks(total)} marks',
-                      style: const TextStyle(
-                        color: _muted,
-                        fontSize: 11,
-                      ),
+                      style: const TextStyle(color: _muted, fontSize: 11),
                     ),
+                    if (showSection) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        sectionName.isNotEmpty
+                            ? 'Section: $sectionName'
+                            : 'Section: Not assigned',
+                        style: const TextStyle(
+                          color: _muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -876,11 +925,7 @@ class _EmptyReport extends StatelessWidget {
               color: Color(0xFFE5F3E9),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              icon,
-              color: const Color(0xFF105C3B),
-              size: 27,
-            ),
+            child: Icon(icon, color: const Color(0xFF105C3B), size: 27),
           ),
           const SizedBox(height: 14),
           Text(
@@ -909,10 +954,7 @@ class _EmptyReport extends StatelessWidget {
 }
 
 class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorBanner({required this.message, required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;
@@ -929,10 +971,7 @@ class _ErrorBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.error_outline_rounded,
-            color: Color(0xFFB42318),
-          ),
+          const Icon(Icons.error_outline_rounded, color: Color(0xFFB42318)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -944,10 +983,7 @@ class _ErrorBanner extends StatelessWidget {
               ),
             ),
           ),
-          TextButton(
-            onPressed: onRetry,
-            child: const Text('Retry'),
-          ),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       ),
     );
@@ -984,9 +1020,6 @@ class _LoadingPanel extends StatelessWidget {
 }
 
 String _formatMarks(double value) {
-  if (value == value.roundToDouble()) {
-    return value.toInt().toString();
-  }
-
+  if (value == value.roundToDouble()) return value.toInt().toString();
   return value.toStringAsFixed(1);
 }
