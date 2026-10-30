@@ -1,4 +1,3 @@
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,21 +19,20 @@ class HomeworkRepository {
     final user = _auth.currentUser;
 
     if (user == null) {
-      throw Exception('Pehle monitor account se login karein.');
+      throw Exception('Please sign in with a monitor account.');
     }
 
-    final snapshot =
-        await _firestore.collection('users').doc(user.uid).get();
+    final snapshot = await _firestore.collection('users').doc(user.uid).get();
 
     if (!snapshot.exists) {
-      throw Exception('Monitor profile nahi mila.');
+      throw Exception('The monitor profile could not be found.');
     }
 
     final data = snapshot.data()!;
     final role = data['role'] as String? ?? '';
 
     if (role != 'monitor') {
-      throw Exception('Yeh feature sirf monitor account ke liye hai.');
+      throw Exception('This feature is available only to monitor accounts.');
     }
 
     final schoolId = data['schoolId'] as String? ?? '';
@@ -45,7 +43,7 @@ class HomeworkRepository {
 
     if (schoolId.isEmpty || sectionId.isEmpty) {
       throw Exception(
-        'Monitor ki school ya section assignment profile mein missing hai.',
+        'The school or section assignment is missing from the monitor profile.',
       );
     }
 
@@ -96,13 +94,11 @@ class HomeworkRepository {
         )
         .where((record) {
           final assignedAt = _dateValue(record['assignedAt']);
-
-          // Missing upload date wale records ko list mein na dikhayein.
+          // Omit records without an upload timestamp, preserving prior behavior.
           if (assignedAt == null) return false;
 
           final localAssignedAt = assignedAt.toLocal();
-
-          // Upload date ke 2 calendar days baad raat 12 baje expiry.
+          // Expire at midnight after two calendar days from upload date.
           final expiryDate = DateTime(
             localAssignedAt.year,
             localAssignedAt.month,
@@ -113,7 +109,7 @@ class HomeworkRepository {
         })
         .toList();
 
-    // Latest uploaded homework sab se upar.
+    // Most recently uploaded homework appears first.
     records.sort((a, b) {
       final dateA = _dateValue(a['assignedAt']);
       final dateB = _dateValue(b['assignedAt']);
@@ -129,18 +125,9 @@ class HomeworkRepository {
   }
 
   DateTime? _dateValue(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate();
-    }
-
-    if (value is DateTime) {
-      return value;
-    }
-
-    if (value is String) {
-      return DateTime.tryParse(value);
-    }
-
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
     return null;
   }
 
@@ -164,8 +151,7 @@ class HomeworkRepository {
 
     if (studentsSnapshot.docs.isEmpty) {
       throw Exception(
-        'Is section mein koi student nahi mila. '
-        'Students ke documents mein schoolId aur sectionId verify karein.',
+        'No students were found in this section. Verify the schoolId and sectionId fields in student documents.',
       );
     }
 
@@ -179,7 +165,6 @@ class HomeworkRepository {
     for (var start = 0; start < students.length; start += 450) {
       final end =
           start + 450 < students.length ? start + 450 : students.length;
-
       final batch = _firestore.batch();
 
       for (final student in students.sublist(start, end)) {

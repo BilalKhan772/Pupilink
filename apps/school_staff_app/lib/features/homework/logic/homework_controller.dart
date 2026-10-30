@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -59,7 +58,7 @@ class HomeworkController extends Notifier<HomeworkState> {
   }) async {
     if (title.trim().isEmpty || description.trim().isEmpty) {
       state = state.copyWith(
-        errorMessage: 'Title aur description fill karein.',
+        errorMessage: 'Please enter both a title and a description.',
         clearSuccess: true,
       );
       return false;
@@ -67,7 +66,7 @@ class HomeworkController extends Notifier<HomeworkState> {
 
     if (description.trim().length > 5000) {
       state = state.copyWith(
-        errorMessage: 'Description 5000 characters se chhoti rakhein.',
+        errorMessage: 'The description must be 5,000 characters or fewer.',
         clearSuccess: true,
       );
       return false;
@@ -75,7 +74,7 @@ class HomeworkController extends Notifier<HomeworkState> {
 
     if (dueDate.isBefore(DateUtils.dateOnly(DateTime.now()))) {
       state = state.copyWith(
-        errorMessage: 'Due date aaj ya future ki select karein.',
+        errorMessage: 'Please select today or a future due date.',
         clearSuccess: true,
       );
       return false;
@@ -104,7 +103,7 @@ class HomeworkController extends Notifier<HomeworkState> {
       state = state.copyWith(
         isSaving: false,
         recentHomework: recentHomework,
-        successMessage: 'Homework $count students ke liye publish ho gaya.',
+        successMessage: 'Homework published successfully for $count students.',
         clearError: true,
       );
 
