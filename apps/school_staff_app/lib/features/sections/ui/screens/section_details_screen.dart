@@ -48,7 +48,6 @@ class _SectionDetailsScreenState
   String? _sectionSummaryError;
 
   String? _monitorName;
-  String? _monitorEmail;
   bool _isLoadingMonitor = true;
   String? _monitorError;
 
@@ -59,6 +58,10 @@ class _SectionDetailsScreenState
     _loadSectionSummary();
     _loadMonitor();
   }
+
+  // ---------------------------------------------------------------------------
+  // Load student count
+  // ---------------------------------------------------------------------------
 
   Future<void> _loadStudentCount() async {
     if (mounted) {
@@ -86,11 +89,16 @@ class _SectionDetailsScreenState
       if (!mounted) return;
 
       setState(() {
-        _studentCountError = 'Students count load nahi ho saki.';
+        _studentCountError =
+            'Students count could not be loaded.';
         _isLoadingStudents = false;
       });
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Load section summary
+  // ---------------------------------------------------------------------------
 
   Future<void> _loadSectionSummary() async {
     if (!mounted) return;
@@ -135,11 +143,15 @@ class _SectionDetailsScreenState
 
       setState(() {
         _sectionSummaryError =
-            'Subjects aur teachers ka data load nahi ho saka.';
+            'Subjects and teachers information could not be loaded.';
         _isLoadingSectionSummary = false;
       });
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Load section monitor
+  // ---------------------------------------------------------------------------
 
   Future<void> _loadMonitor() async {
     if (!mounted) return;
@@ -160,7 +172,6 @@ class _SectionDetailsScreenState
       if (!document.exists || document.data() == null) {
         setState(() {
           _monitorName = null;
-          _monitorEmail = null;
           _isLoadingMonitor = false;
         });
         return;
@@ -168,26 +179,34 @@ class _SectionDetailsScreenState
 
       final data = document.data()!;
 
-      final monitorId = (data['monitorId'] as String? ?? '').trim();
-      final monitorName = (data['monitorName'] as String? ?? '').trim();
-      final monitorEmail = (data['monitorEmail'] as String? ?? '').trim();
+      final monitorId =
+          (data['monitorId'] as String? ?? '').trim();
+
+      final monitorName =
+          (data['monitorName'] as String? ?? '').trim();
 
       setState(() {
         _monitorName =
-            monitorId.isEmpty || monitorName.isEmpty ? null : monitorName;
-        _monitorEmail =
-            monitorId.isEmpty || monitorEmail.isEmpty ? null : monitorEmail;
+            monitorId.isEmpty || monitorName.isEmpty
+                ? null
+                : monitorName;
+
         _isLoadingMonitor = false;
       });
     } catch (_) {
       if (!mounted) return;
 
       setState(() {
-        _monitorError = 'Monitor information load nahi ho saki.';
+        _monitorError =
+            'Monitor information could not be loaded.';
         _isLoadingMonitor = false;
       });
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Open Add Monitor
+  // ---------------------------------------------------------------------------
 
   Future<void> _openAddMonitor() async {
     await Navigator.of(context).push<void>(
@@ -209,11 +228,15 @@ class _SectionDetailsScreenState
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('$feature screen abhi connect nahi hui hai.'),
+          content: Text('$feature screen is not connected yet.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
   }
+
+  // ---------------------------------------------------------------------------
+  // Open All Students
+  // ---------------------------------------------------------------------------
 
   Future<void> _openAllStudents() async {
     await Navigator.of(context).push<void>(
@@ -231,6 +254,10 @@ class _SectionDetailsScreenState
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Open Subjects & Teacher
+  // ---------------------------------------------------------------------------
+
   Future<void> _openSubjectsTeacher() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -247,6 +274,10 @@ class _SectionDetailsScreenState
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Open Timetable
+  // ---------------------------------------------------------------------------
+
   Future<void> _openTimetable() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -260,6 +291,10 @@ class _SectionDetailsScreenState
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Main screen
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -293,7 +328,10 @@ class _SectionDetailsScreenState
             ),
             const Text(
               'Section Details',
-              style: TextStyle(color: _muted, fontSize: 13),
+              style: TextStyle(
+                color: _muted,
+                fontSize: 13,
+              ),
             ),
           ],
         ),
@@ -329,7 +367,9 @@ class _SectionDetailsScreenState
                         : Icons.check_circle_outline,
                   ),
                   title: Text(
-                    isActive ? 'Deactivate section' : 'Activate section',
+                    isActive
+                        ? 'Deactivate section'
+                        : 'Activate section',
                   ),
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -358,7 +398,9 @@ class _SectionDetailsScreenState
                   isActive: isActive,
                   onEdit: widget.onEdit,
                 ),
+
                 const SizedBox(height: 28),
+
                 const Text(
                   'Manage Section',
                   style: TextStyle(
@@ -367,16 +409,20 @@ class _SectionDetailsScreenState
                     color: _text,
                   ),
                 ),
+
                 const SizedBox(height: 6),
+
                 const Text(
-                  'Manage attendance, students and other section activities.',
+                  'Manage students and other section activities.',
                   style: TextStyle(
                     color: _muted,
                     fontSize: 13,
                     height: 1.5,
                   ),
                 ),
+
                 const SizedBox(height: 16),
+
                 _ManagementGrid(
                   onTap: (feature) {
                     if (feature == 'All Students') {
@@ -392,7 +438,9 @@ class _SectionDetailsScreenState
                     }
                   },
                 ),
+
                 const SizedBox(height: 28),
+
                 const Text(
                   'Section Summary',
                   style: TextStyle(
@@ -401,7 +449,10 @@ class _SectionDetailsScreenState
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+
                 const SizedBox(height: 14),
+
+                // Summary is preserved, including the monitor name.
                 _SectionSummary(
                   studentCount: _studentCount,
                   isLoadingStudents: _isLoadingStudents,
@@ -413,70 +464,14 @@ class _SectionDetailsScreenState
                   sectionSummaryError: _sectionSummaryError,
                   onRetrySectionSummary: _loadSectionSummary,
                   monitorName: _monitorName,
-                  monitorEmail: _monitorEmail,
                   isLoadingMonitor: _isLoadingMonitor,
                   monitorError: _monitorError,
                   onRetryMonitor: _loadMonitor,
                 ),
-                const SizedBox(height: 24),
-                if (_monitorName != null)
-                  _MonitorInformationCard(
-                    name: _monitorName!,
-                    email: _monitorEmail,
-                    onManage: _openAddMonitor,
-                  ),
-                if (_monitorName != null) const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: const Color(0xFFE4ECE6),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.school_outlined,
-                        color: _green,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Class Information',
-                              style: TextStyle(
-                                color: _text,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              'Class: ${widget.className.isEmpty ? 'Not available' : widget.className}',
-                              style: const TextStyle(
-                                color: _muted,
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Capacity: ${section.capacity?.toString() ?? 'Not set'} students',
-                              style: const TextStyle(
-                                color: _muted,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+
+                // Assigned Monitor detail card and Class Information card
+                // have intentionally been removed.
+                const SizedBox(height: 10),
               ],
             );
           },
@@ -486,87 +481,9 @@ class _SectionDetailsScreenState
   }
 }
 
-class _MonitorInformationCard extends StatelessWidget {
-  const _MonitorInformationCard({
-    required this.name,
-    required this.email,
-    required this.onManage,
-  });
-
-  final String name;
-  final String? email;
-  final VoidCallback onManage;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE4ECE6)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF6EF),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: const Icon(
-              Icons.verified_user_outlined,
-              color: Color(0xFF138A4B),
-            ),
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Assigned Monitor',
-                  style: TextStyle(
-                    color: Color(0xFF758078),
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  name,
-                  style: const TextStyle(
-                    color: Color(0xFF172B24),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                if (email != null && email!.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    email!,
-                    style: const TextStyle(
-                      color: Color(0xFF758078),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Manage monitor',
-            onPressed: onManage,
-            icon: const Icon(
-              Icons.edit_outlined,
-              color: Color(0xFF138A4B),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// -----------------------------------------------------------------------------
+// Section header card
+// -----------------------------------------------------------------------------
 
 class _SectionHeaderCard extends StatelessWidget {
   const _SectionHeaderCard({
@@ -586,10 +503,13 @@ class _SectionHeaderCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE6EEE8)),
+        border: Border.all(
+          color: const Color(0xFFE6EEE8),
+        ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF173C27).withValues(alpha: 0.035),
+            color: const Color(0xFF173C27)
+                .withValues(alpha: 0.035),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),
@@ -680,7 +600,9 @@ class _SectionHeaderCard extends StatelessWidget {
             icon: const Icon(Icons.edit_outlined),
             label: const Text(
               'Edit Section',
-              style: TextStyle(fontWeight: FontWeight.w700),
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+              ),
             ),
           );
 
@@ -711,17 +633,18 @@ class _SectionHeaderCard extends StatelessWidget {
   }
 }
 
+// -----------------------------------------------------------------------------
+// Management grid
+// -----------------------------------------------------------------------------
+
 class _ManagementGrid extends StatelessWidget {
-  const _ManagementGrid({required this.onTap});
+  const _ManagementGrid({
+    required this.onTap,
+  });
 
   final ValueChanged<String> onTap;
 
   static const List<_ManagementItem> _items = [
-    _ManagementItem(
-      title: 'Attendance',
-      subtitle: 'Mark and manage attendance',
-      icon: Icons.fact_check_outlined,
-    ),
     _ManagementItem(
       title: 'Add Monitor',
       subtitle: 'Assign or manage section monitor',
@@ -738,11 +661,6 @@ class _ManagementGrid extends StatelessWidget {
       icon: Icons.calendar_month_outlined,
     ),
     _ManagementItem(
-      title: 'Exam Date Sheet',
-      subtitle: 'Manage exam dates for this section',
-      icon: Icons.description_outlined,
-    ),
-    _ManagementItem(
       title: 'All Students',
       subtitle: 'View and manage students in this section',
       icon: Icons.groups_outlined,
@@ -753,10 +671,15 @@ class _ManagementGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 1050 ? 2 : 1;
+        final columns =
+            constraints.maxWidth >= 1050 ? 2 : 1;
+
         const spacing = 12.0;
+
         final itemWidth =
-            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+            (constraints.maxWidth -
+                spacing * (columns - 1)) /
+            columns;
 
         return Wrap(
           spacing: spacing,
@@ -806,11 +729,15 @@ class _ManagementCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 112),
+          constraints: const BoxConstraints(
+            minHeight: 112,
+          ),
           padding: const EdgeInsets.all(17),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFE7EEE9)),
+            border: Border.all(
+              color: const Color(0xFFE7EEE9),
+            ),
           ),
           child: Row(
             children: [
@@ -827,7 +754,9 @@ class _ManagementCard extends StatelessWidget {
                   size: 29,
                 ),
               ),
+
               const SizedBox(width: 15),
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -853,7 +782,9 @@ class _ManagementCard extends StatelessWidget {
                   ],
                 ),
               ),
+
               const SizedBox(width: 8),
+
               const Icon(
                 Icons.chevron_right_rounded,
                 color: Color(0xFF8A948D),
@@ -867,6 +798,10 @@ class _ManagementCard extends StatelessWidget {
   }
 }
 
+// -----------------------------------------------------------------------------
+// Section summary
+// -----------------------------------------------------------------------------
+
 class _SectionSummary extends StatelessWidget {
   const _SectionSummary({
     required this.studentCount,
@@ -879,7 +814,6 @@ class _SectionSummary extends StatelessWidget {
     required this.sectionSummaryError,
     required this.onRetrySectionSummary,
     required this.monitorName,
-    required this.monitorEmail,
     required this.isLoadingMonitor,
     required this.monitorError,
     required this.onRetryMonitor,
@@ -897,7 +831,6 @@ class _SectionSummary extends StatelessWidget {
   final VoidCallback onRetrySectionSummary;
 
   final String? monitorName;
-  final String? monitorEmail;
   final bool isLoadingMonitor;
   final String? monitorError;
   final VoidCallback onRetryMonitor;
@@ -937,10 +870,15 @@ class _SectionSummary extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final columns = constraints.maxWidth >= 650 ? 4 : 2;
+          final columns =
+              constraints.maxWidth >= 650 ? 4 : 2;
+
           const spacing = 12.0;
+
           final itemWidth =
-              (constraints.maxWidth - spacing * (columns - 1)) / columns;
+              (constraints.maxWidth -
+                  spacing * (columns - 1)) /
+              columns;
 
           return Wrap(
             spacing: spacing,
@@ -976,7 +914,9 @@ class _SectionSummary extends StatelessWidget {
                           : null;
 
               final displayMonitorName =
-                  isMonitor && monitorName != null && monitorName!.isNotEmpty;
+                  isMonitor &&
+                  monitorName != null &&
+                  monitorName!.isNotEmpty;
 
               return SizedBox(
                 width: itemWidth,
@@ -995,7 +935,9 @@ class _SectionSummary extends StatelessWidget {
                         size: 27,
                       ),
                     ),
+
                     const SizedBox(height: 10),
+
                     if (isLoading)
                       const SizedBox(
                         height: 28,
@@ -1023,7 +965,9 @@ class _SectionSummary extends StatelessWidget {
                         child: Center(
                           child: Text(
                             isMonitor
-                                ? (displayMonitorName ? monitorName! : 'Not assigned')
+                                ? (displayMonitorName
+                                    ? monitorName!
+                                    : 'Not assigned')
                                 : '${count ?? 0}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1038,7 +982,9 @@ class _SectionSummary extends StatelessWidget {
                           ),
                         ),
                       ),
+
                     const SizedBox(height: 4),
+
                     Text(
                       item.title,
                       textAlign: TextAlign.center,
@@ -1048,11 +994,12 @@ class _SectionSummary extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+
                     if (hasError)
                       const Padding(
                         padding: EdgeInsets.only(top: 4),
                         child: Text(
-                          'Tap retry',
+                          'Tap to retry',
                           style: TextStyle(
                             color: Color(0xFF758078),
                             fontSize: 11,
