@@ -1,3 +1,4 @@
+
 import 'parent_auth_remote_data_source.dart';
 
 class ParentAuthRepository {
@@ -25,6 +26,12 @@ class ParentAuthRepository {
       email: email,
       password: password,
     );
+  }
+
+  Future<void> resetPassword({
+    required String email,
+  }) {
+    return remote.resetPassword(email: email);
   }
 
   Future<void> logout() {

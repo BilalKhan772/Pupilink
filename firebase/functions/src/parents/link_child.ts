@@ -1,376 +1,304 @@
+
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { getApps, initializeApp } from "firebase-admin/app";
+import {
+  getFirestore,
+  FieldValue,
+} from "firebase-admin/firestore";
+import {
+  getApps,
+  initializeApp,
+} from "firebase-admin/app";
 
 if (getApps().length === 0) {
-    initializeApp();
+  initializeApp();
 }
 
 const db = getFirestore();
 
 export const linkChild = onCall(async (request) => {
-    /*
-     * ============================
-     * AUTH CHECK
-     * ============================
-     */
+  // --------------------------------------------------
+  // 1. AUTHENTICATION
+  // --------------------------------------------------
 
-    if (!request.auth) {
+  if (!request.auth) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Please log in before connecting a child.",
+    );
+  }
+
+  const parentId = request.auth.uid;
+
+  // --------------------------------------------------
+  // 2. INPUT VALIDATION
+  // --------------------------------------------------
+
+  const data = request.data as {
+    city?: unknown;
+    schoolId?: unknown;
+    admissionNumber?: unknown;
+  };
+
+  const city =
+    typeof data.city === "string"
+      ? data.city.trim()
+      : "";
+
+  const schoolId =
+    typeof data.schoolId === "string"
+      ? data.schoolId.trim()
+      : "";
+
+  const admissionNumber =
+    typeof data.admissionNumber === "string"
+      ? data.admissionNumber.trim()
+      : "";
+
+  if (!city || !schoolId || !admissionNumber) {
+    throw new HttpsError(
+      "invalid-argument",
+      "City, school and admission number are required.",
+    );
+  }
+
+  if (
+    city.length > 100 ||
+    schoolId.length > 150 ||
+    admissionNumber.length > 64
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "One or more entered values are too long.",
+    );
+  }
+
+  // --------------------------------------------------
+  // 3. VERIFY PARENT ACCOUNT
+  // --------------------------------------------------
+
+  const parentRef = db
+    .collection("users")
+    .doc(parentId);
+
+  const parentSnapshot = await parentRef.get();
+
+  if (!parentSnapshot.exists) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Parent profile could not be found.",
+    );
+  }
+
+  const parentData = parentSnapshot.data();
+
+  if (parentData?.role !== "parent") {
+    throw new HttpsError(
+      "permission-denied",
+      "Only parent accounts can connect students.",
+    );
+  }
+
+  // --------------------------------------------------
+  // 4. FIND STUDENT
+  // --------------------------------------------------
+
+  const studentQuery = await db
+    .collection("students")
+    .where("admissionNumber", "==", admissionNumber)
+    .where("city", "==", city)
+    .where("schoolId", "==", schoolId)
+    .where("isActive", "==", true)
+    .limit(2)
+    .get();
+
+  if (studentQuery.empty) {
+    throw new HttpsError(
+      "not-found",
+      "No active student was found with these details.",
+    );
+  }
+
+  // Avoid connecting the wrong student when duplicate
+  // admission records exist.
+  if (studentQuery.docs.length > 1) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Multiple student records have this admission number. "
+      + "Please contact the school.",
+    );
+  }
+
+  const studentDocument = studentQuery.docs[0];
+  const studentId = studentDocument.id;
+
+  const studentRef = db
+    .collection("students")
+    .doc(studentId);
+
+  // --------------------------------------------------
+  // 5. DETERMINISTIC LINK ID
+  // --------------------------------------------------
+
+  const linkId = `${parentId}_${studentId}`;
+
+  const linkRef = db
+    .collection("parent_child_links")
+    .doc(linkId);
+
+  // --------------------------------------------------
+  // 6. AUTOMATIC LINK TRANSACTION
+  // --------------------------------------------------
+
+  const linkResult = await db.runTransaction(
+    async (transaction) => {
+      // Read both documents before making any writes.
+      const [freshStudentSnapshot, existingLinkSnapshot] =
+          await Promise.all([
+        transaction.get(studentRef),
+        transaction.get(linkRef),
+      ]);
+
+      if (!freshStudentSnapshot.exists) {
         throw new HttpsError(
-            "unauthenticated",
-            "Aapko pehle login karna hoga.",
+          "not-found",
+          "Student record could not be found.",
         );
-    }
+      }
 
-    const parentId = request.auth.uid;
+      const freshStudentData =
+          freshStudentSnapshot.data();
 
-    // ==========================================
-    // DEBUG LOGS - TEMPORARY
-    // ==========================================
-
-    console.log(
-        "LINK CHILD - Parent UID:",
-        parentId,
-    );
-
-    console.log(
-        "LINK CHILD - FIRESTORE_EMULATOR_HOST:",
-        process.env.FIRESTORE_EMULATOR_HOST,
-    );
-
-    /*
-     * ============================
-     * INPUT
-     * ============================
-     */
-
-    const data = request.data as {
-        city?: unknown;
-        schoolId?: unknown;
-        admissionNumber?: unknown;
-    };
-
-    const city =
-        typeof data.city === "string"
-            ? data.city.trim()
-            : "";
-
-    const schoolId =
-        typeof data.schoolId === "string"
-            ? data.schoolId.trim()
-            : "";
-
-    const admissionNumber =
-        typeof data.admissionNumber === "string"
-            ? data.admissionNumber.trim()
-            : "";
-
-    if (
-        city.length === 0 ||
-        schoolId.length === 0 ||
-        admissionNumber.length === 0
-    ) {
+      if (!freshStudentData) {
         throw new HttpsError(
-            "invalid-argument",
-            "City, school aur admission number required hain.",
+          "failed-precondition",
+          "Student information is unavailable.",
         );
-    }
+      }
 
-    /*
-     * ============================
-     * PARENT PROFILE CHECK
-     * ============================
-     */
-
-    const parentRef = db
-        .collection("users")
-        .doc(parentId);
-
-    // ==========================================
-    // DEBUG LOGS - FIRESTORE CHECK
-    // ==========================================
-
-    console.log(
-        "LINK CHILD - Parent document path:",
-        parentRef.path,
-    );
-
-    console.log(
-        "LINK CHILD - Firebase project:",
-        process.env.GCLOUD_PROJECT,
-    );
-
-    console.log(
-        "LINK CHILD - Firestore host:",
-        process.env.FIRESTORE_EMULATOR_HOST,
-    );
-
-    const parentSnapshot =
-        await parentRef.get();
-
-    // ==========================================
-    // DEBUG - LIST USERS SEEN BY ADMIN SDK
-    // ==========================================
-
-    const usersSnapshot =
-        await db
-            .collection("users")
-            .limit(20)
-            .get();
-
-    console.log(
-        "LINK CHILD - Users collection document count:",
-        usersSnapshot.size,
-    );
-
-    for (const userDoc of usersSnapshot.docs) {
-        console.log(
-            "LINK CHILD - User document found:",
-            userDoc.id,
-        );
-
-        console.log(
-            "LINK CHILD - User document data:",
-            userDoc.data(),
-        );
-    }
-
-    console.log(
-        "LINK CHILD - Requested parent document ID:",
-        parentId,
-    );
-
-    // ==========================================
-    // DEBUG - EXACT DOCUMENT ID COMPARISON
-    // ==========================================
-
-    const matchingUserDocs =
-        usersSnapshot.docs.filter(
-            (userDoc) =>
-                userDoc.id === parentId,
-        );
-
-    console.log(
-        "LINK CHILD - Matching user document count:",
-        matchingUserDocs.length,
-    );
-
-    console.log(
-        "LINK CHILD - Parent ID length:",
-        parentId.length,
-    );
-
-    for (const userDoc of usersSnapshot.docs) {
-        console.log(
-            "LINK CHILD - User ID length:",
-            userDoc.id.length,
-        );
-
-        console.log(
-            "LINK CHILD - User ID JSON:",
-            JSON.stringify(userDoc.id),
-        );
-
-        console.log(
-            "LINK CHILD - Parent ID JSON:",
-            JSON.stringify(parentId),
-        );
-    }
-
-    // ==========================================
-    // DEBUG - DIRECT ADMIN SDK READ
-    // ==========================================
-
-    const directParentSnapshot =
-        await db
-            .collection("users")
-            .doc(parentId)
-            .get();
-
-    console.log(
-        "LINK CHILD - Direct parent read exists:",
-        directParentSnapshot.exists,
-    );
-
-    console.log(
-        "LINK CHILD - Direct parent read data:",
-        directParentSnapshot.data(),
-    );
-
-    console.log(
-        "LINK CHILD - Parent document exists:",
-        parentSnapshot.exists,
-    );
-
-    if (!parentSnapshot.exists) {
+      // Recheck student details inside the transaction.
+      if (
+        freshStudentData.schoolId !== schoolId ||
+        freshStudentData.city !== city ||
+        freshStudentData.admissionNumber !== admissionNumber ||
+        freshStudentData.isActive !== true
+      ) {
         throw new HttpsError(
-            "failed-precondition",
-            "Parent profile nahi mila.",
+          "failed-precondition",
+          "Student information changed. Please verify the details.",
         );
-    }
+      }
 
-    const parentData =
-        parentSnapshot.data();
+      const existingData = existingLinkSnapshot.exists
+        ? existingLinkSnapshot.data()
+        : undefined;
 
-    if (parentData?.role !== "parent") {
+      const existingStatus = existingData?.status;
+
+      // ----------------------------------------------
+      // ALREADY CONNECTED
+      // ----------------------------------------------
+
+      if (existingStatus === "approved") {
+        // Repair parentIds if an older approved link
+        // exists but the student document is missing it.
+        transaction.update(studentRef, {
+          parentIds: FieldValue.arrayUnion(parentId),
+        });
+
+        return {
+          studentName:
+              freshStudentData.name ?? "",
+          alreadyLinked: true,
+        };
+      }
+
+      // ----------------------------------------------
+      // ALLOW NEW OR PREVIOUSLY PENDING/REJECTED LINK
+      // ----------------------------------------------
+
+      if (
+        existingStatus !== undefined &&
+        existingStatus !== "pending" &&
+        existingStatus !== "rejected"
+      ) {
         throw new HttpsError(
-            "permission-denied",
-            "Sirf parent account child link kar sakta hai.",
+          "failed-precondition",
+          "This child connection cannot be updated.",
         );
-    }
+      }
 
-    /*
-     * ============================
-     * FIND STUDENT
-     * ============================
-     */
+      // ----------------------------------------------
+      // SAVE APPROVED LINK DIRECTLY
+      // ----------------------------------------------
 
-    const studentQuery =
-        await db
-            .collection("students")
-            .where(
-                "admissionNumber",
-                "==",
-                admissionNumber,
-            )
-            .where(
-                "city",
-                "==",
-                city,
-            )
-            .where(
-                "schoolId",
-                "==",
-                schoolId,
-            )
-            .where(
-                "isActive",
-                "==",
-                true,
-            )
-            .limit(1)
-            .get();
+      transaction.set(
+        linkRef,
+        {
+          parentId: parentId,
+          studentId: studentId,
 
-    if (studentQuery.empty) {
-        throw new HttpsError(
-            "not-found",
-            "Is information ke saath koi student nahi mila.",
-        );
-    }
+          admissionNumber:
+              freshStudentData.admissionNumber,
 
-    const studentDocument =
-        studentQuery.docs[0];
+          city: freshStudentData.city,
+          schoolId: freshStudentData.schoolId,
 
-    const studentData =
-        studentDocument.data();
+          schoolName:
+              freshStudentData.schoolName ?? "",
 
-    const studentId =
-        studentDocument.id;
+          // Direct automatic linking.
+          status: "approved",
 
-    /*
-     * ============================
-     * DETERMINISTIC LINK ID
-     * ============================
-     */
+          // Preserve the original request time when
+          // approving a previously pending request.
+          requestedAt:
+              existingData?.requestedAt ??
+              FieldValue.serverTimestamp(),
 
-    const linkId =
-        `${parentId}_${studentId}`;
+          approvedAt:
+              FieldValue.serverTimestamp(),
 
-    const linkRef =
-        db
-            .collection("parent_child_links")
-            .doc(linkId);
+          approvedBy: "system",
+          autoApproved: true,
 
-    /*
-     * ============================
-     * EXISTING LINK CHECK
-     * ============================
-     */
+          rejectionReason: null,
 
-    const existingLink =
-        await linkRef.get();
+          updatedAt:
+              FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
 
-    if (existingLink.exists) {
-        const existingData =
-            existingLink.data();
+      // Add the parent UID to the student's parent list.
+      // This is done atomically with the link document.
+      transaction.update(studentRef, {
+        parentIds: FieldValue.arrayUnion(parentId),
+      });
 
-        const status =
-            existingData?.status ??
-            "pending";
-
-        if (status === "approved") {
-            throw new HttpsError(
-                "already-exists",
-                "Ye child pehle se aapke account ke saath linked hai.",
-            );
-        }
-
-        if (status === "pending") {
-            throw new HttpsError(
-                "already-exists",
-                "Is child ki linking request already pending hai.",
-            );
-        }
-
-        /*
-         * If previous request was rejected,
-         * allow a new request.
-         */
-    }
-
-    /*
-     * ============================
-     * CREATE LINK REQUEST
-     * ============================
-     */
-
-    await linkRef.set({
-        parentId: parentId,
-
-        studentId: studentId,
-
-        admissionNumber:
-            studentData.admissionNumber ??
-            admissionNumber,
-
-        city:
-            studentData.city ??
-            city,
-
-        schoolId:
-            studentData.schoolId ??
-            schoolId,
-
-        schoolName:
-            studentData.schoolName ??
-            "",
-
-        status: "pending",
-
-        requestedAt:
-            FieldValue.serverTimestamp(),
-
-        approvedAt: null,
-
-        rejectionReason: null,
-    });
-
-    /*
-     * ============================
-     * RESPONSE
-     * ============================
-     */
-
-    return {
-        success: true,
-
-        linkId: linkId,
-
-        studentId: studentId,
-
+      return {
         studentName:
-            studentData.name ?? "",
+            freshStudentData.name ?? "",
+        alreadyLinked: false,
+      };
+    },
+  );
 
-        status: "pending",
-    };
+  // --------------------------------------------------
+  // 7. RESPONSE
+  // --------------------------------------------------
+
+  console.log("Child automatically linked.", {
+    parentId,
+    studentId,
+    alreadyLinked: linkResult.alreadyLinked,
+  });
+
+  return {
+    success: true,
+    linkId: linkId,
+    studentId: studentId,
+    studentName: linkResult.studentName,
+    status: "approved",
+    alreadyLinked: linkResult.alreadyLinked,
+  };
 });

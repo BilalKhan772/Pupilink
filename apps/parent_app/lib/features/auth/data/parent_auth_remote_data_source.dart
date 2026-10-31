@@ -1,3 +1,4 @@
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -24,7 +25,7 @@ class ParentAuthRemoteDataSource {
     final User? user = credential.user;
 
     if (user == null) {
-      throw Exception('Account create nahi ho saka.');
+      throw Exception('Unable to create the account.');
     }
 
     await firestore.collection('users').doc(user.uid).set({
@@ -42,6 +43,14 @@ class ParentAuthRemoteDataSource {
     await auth.signInWithEmailAndPassword(
       email: email,
       password: password,
+    );
+  }
+
+  Future<void> resetPassword({
+    required String email,
+  }) async {
+    await auth.sendPasswordResetEmail(
+      email: email,
     );
   }
 

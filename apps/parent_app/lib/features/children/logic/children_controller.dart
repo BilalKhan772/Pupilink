@@ -1,3 +1,4 @@
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/children_repository.dart';
@@ -9,9 +10,7 @@ final childrenRepositoryProvider =
 });
 
 final childrenControllerProvider =
-    StateNotifierProvider<
-        ChildrenController,
-        ChildrenState>(
+    StateNotifierProvider<ChildrenController, ChildrenState>(
   (ref) {
     return ChildrenController(
       ref.read(childrenRepositoryProvider),
@@ -19,8 +18,7 @@ final childrenControllerProvider =
   },
 );
 
-class ChildrenController
-    extends StateNotifier<ChildrenState> {
+class ChildrenController extends StateNotifier<ChildrenState> {
   final ChildrenRepository repository;
 
   ChildrenController(this.repository)
@@ -33,20 +31,80 @@ class ChildrenController
     );
 
     try {
-      final children =
-          await repository.getMyChildren();
+      final children = await repository.getMyChildren();
 
       state = state.copyWith(
         isLoading: false,
         children: children,
         clearError: true,
       );
-    } catch (e) {
+    } catch (error) {
       state = state.copyWith(
         isLoading: false,
-        error:
-            'Children load nahi ho sake.',
+        error: _friendlyError(error),
       );
     }
+  }
+
+  Future<bool> removeChild({
+    required String linkId,
+  }) async {
+    if (linkId.trim().isEmpty) {
+      state = state.copyWith(
+        error: 'Child connection ID is missing.',
+      );
+      return false;
+    }
+
+    if (state.isRemovingChild) {
+      return false;
+    }
+
+    state = state.copyWith(
+      isRemovingChild: true,
+      removingLinkId: linkId,
+      clearError: true,
+    );
+
+    try {
+      await repository.removeChildLink(linkId: linkId);
+
+      final updatedChildren = state.children
+          .where((child) => child['linkId'] != linkId)
+          .toList();
+
+      state = state.copyWith(
+        isRemovingChild: false,
+        clearRemovingLinkId: true,
+        children: updatedChildren,
+        clearError: true,
+      );
+
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isRemovingChild: false,
+        clearRemovingLinkId: true,
+        error: _friendlyError(error),
+      );
+
+      return false;
+    }
+  }
+
+  String _friendlyError(Object error) {
+    final message = error.toString();
+
+    if (message.contains('permission-denied')) {
+      return 'You do not have permission to manage this child connection.';
+    }
+
+    if (message.contains('network')) {
+      return 'Please check your internet connection and try again.';
+    }
+
+    return message
+        .replaceFirst('Exception: ', '')
+        .replaceFirst('FirebaseException: ', '');
   }
 }
