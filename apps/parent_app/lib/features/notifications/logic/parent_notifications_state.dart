@@ -1,3 +1,4 @@
+
 class ParentNotificationsState {
   final bool isLoading;
   final List<Map<String, dynamic>> notifications;
@@ -16,19 +17,13 @@ class ParentNotificationsState {
     bool clearError = false,
   }) {
     return ParentNotificationsState(
-      isLoading:
-          isLoading ?? this.isLoading,
-      notifications:
-          notifications ?? this.notifications,
-      error: clearError
-          ? null
-          : (error ?? this.error),
+      isLoading: isLoading ?? this.isLoading,
+      notifications: notifications ?? this.notifications,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 
-  int get totalCount {
-    return notifications.length;
-  }
+  int get totalCount => notifications.length;
 
   int get unreadCount {
     return notifications.where((notification) {
@@ -42,11 +37,7 @@ class ParentNotificationsState {
     }).length;
   }
 
-  bool get hasNotifications {
-    return notifications.isNotEmpty;
-  }
+  bool get hasNotifications => notifications.isNotEmpty;
 
-  bool get hasUnreadNotifications {
-    return unreadCount > 0;
-  }
+  bool get hasUnreadNotifications => unreadCount > 0;
 }

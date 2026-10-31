@@ -1,3 +1,4 @@
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/parent_notifications_repository.dart';
@@ -14,23 +15,17 @@ final parentNotificationsControllerProvider =
         ParentNotificationsState>(
   (ref) {
     return ParentNotificationsController(
-      ref.read(
-        parentNotificationsRepositoryProvider,
-      ),
+      ref.read(parentNotificationsRepositoryProvider),
     );
   },
 );
 
 class ParentNotificationsController
-    extends StateNotifier<
-        ParentNotificationsState> {
+    extends StateNotifier<ParentNotificationsState> {
   final ParentNotificationsRepository repository;
 
-  ParentNotificationsController(
-    this.repository,
-  ) : super(
-          const ParentNotificationsState(),
-        );
+  ParentNotificationsController(this.repository)
+      : super(const ParentNotificationsState());
 
   Future<void> loadNotifications() async {
     state = state.copyWith(
@@ -39,8 +34,7 @@ class ParentNotificationsController
     );
 
     try {
-      final notifications =
-          await repository.getNotifications();
+      final notifications = await repository.getNotifications();
 
       state = state.copyWith(
         isLoading: false,
@@ -50,8 +44,7 @@ class ParentNotificationsController
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error:
-            'Notifications load nahi ho sakin.',
+        error: 'Unable to load notifications. Please try again.',
       );
     }
   }
@@ -66,8 +59,7 @@ class ParentNotificationsController
 
       final updatedNotifications =
           state.notifications.map((notification) {
-        if (notification['id'] ==
-            notificationId) {
+        if (notification['id'] == notificationId) {
           return {
             ...notification,
             'isRead': true,
@@ -78,16 +70,14 @@ class ParentNotificationsController
       }).toList();
 
       state = state.copyWith(
-        notifications:
-            updatedNotifications,
+        notifications: updatedNotifications,
         clearError: true,
       );
 
       return true;
     } catch (e) {
       state = state.copyWith(
-        error:
-            'Notification read nahi ho saki.',
+        error: 'Unable to mark notification as read.',
       );
 
       return false;
