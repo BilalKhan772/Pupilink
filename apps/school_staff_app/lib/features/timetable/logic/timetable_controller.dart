@@ -22,6 +22,10 @@ class TimetableController extends Notifier<TimetableState> {
     return const TimetableState();
   }
 
+  // ---------------------------------------------------------------------------
+  // Load timetable
+  // ---------------------------------------------------------------------------
+
   Future<void> loadTimetable({
     required String schoolId,
     required String sectionId,
@@ -46,10 +50,14 @@ class TimetableController extends Notifier<TimetableState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Timetable load nahi ho saka: $e',
+        error: 'Unable to load timetable. Please try again.',
       );
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Select weekday
+  // ---------------------------------------------------------------------------
 
   void selectDay(String day) {
     state = state.copyWith(
@@ -57,6 +65,10 @@ class TimetableController extends Notifier<TimetableState> {
       clearError: true,
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Save timetable entry
+  // ---------------------------------------------------------------------------
 
   Future<bool> saveEntry({
     String? entryId,
@@ -101,7 +113,7 @@ class TimetableController extends Notifier<TimetableState> {
 
       state = state.copyWith(
         isSaving: false,
-        successMessage: 'Timetable successfully save ho gaya.',
+        successMessage: 'Timetable saved successfully.',
         clearError: true,
       );
 
@@ -109,12 +121,19 @@ class TimetableController extends Notifier<TimetableState> {
     } catch (e) {
       state = state.copyWith(
         isSaving: false,
-        error: e.toString().replaceFirst('Exception: ', ''),
+        error: _getReadableError(
+          e,
+          fallback: 'Unable to save timetable. Please try again.',
+        ),
       );
 
       return false;
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Delete timetable entry
+  // ---------------------------------------------------------------------------
 
   Future<bool> deleteEntry({
     required String entryId,
@@ -141,7 +160,7 @@ class TimetableController extends Notifier<TimetableState> {
 
       state = state.copyWith(
         isSaving: false,
-        successMessage: 'Timetable entry delete ho gayi.',
+        successMessage: 'Timetable period deleted successfully.',
         clearError: true,
       );
 
@@ -149,10 +168,45 @@ class TimetableController extends Notifier<TimetableState> {
     } catch (e) {
       state = state.copyWith(
         isSaving: false,
-        error: e.toString().replaceFirst('Exception: ', ''),
+        error: _getReadableError(
+          e,
+          fallback: 'Unable to delete timetable period. Please try again.',
+        ),
       );
 
       return false;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // User-friendly error messages
+  // ---------------------------------------------------------------------------
+
+  String _getReadableError(
+    Object error, {
+    required String fallback,
+  }) {
+    if (error is ArgumentError) {
+      final message = error.message;
+
+      if (message != null && message.toString().trim().isNotEmpty) {
+        return message.toString();
+      }
+    }
+
+    if (error is Exception) {
+      final message = error
+          .toString()
+          .replaceFirst('Exception: ', '')
+          .replaceFirst('Bad state: ', '')
+          .trim();
+
+      if (message.isNotEmpty &&
+          !message.startsWith('Instance of')) {
+        return message;
+      }
+    }
+
+    return fallback;
   }
 }

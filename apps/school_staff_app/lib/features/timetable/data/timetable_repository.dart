@@ -1,20 +1,28 @@
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TimetableRepository {
-  TimetableRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  TimetableRepository({
+    FirebaseFirestore? firestore,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
 
   CollectionReference<Map<String, dynamic>> get _timetable =>
       _firestore.collection('timetable');
 
+  // ---------------------------------------------------------------------------
+  // Get timetable
+  // ---------------------------------------------------------------------------
+
   Future<List<Map<String, dynamic>>> getTimetable({
     required String schoolId,
     required String sectionId,
   }) async {
     if (schoolId.trim().isEmpty || sectionId.trim().isEmpty) {
-      throw ArgumentError('School ID aur Section ID required hain.');
+      throw ArgumentError(
+        'School ID and Section ID are required.',
+      );
     }
 
     final snapshot = await _timetable
@@ -30,8 +38,11 @@ class TimetableRepository {
     }).toList();
 
     records.sort((a, b) {
-      final dayCompare = _dayOrder(a['day'] as String?)
-          .compareTo(_dayOrder(b['day'] as String?));
+      final dayCompare = _dayOrder(
+        a['day'] as String?,
+      ).compareTo(
+        _dayOrder(b['day'] as String?),
+      );
 
       if (dayCompare != 0) return dayCompare;
 
@@ -41,6 +52,10 @@ class TimetableRepository {
 
     return records;
   }
+
+  // ---------------------------------------------------------------------------
+  // Add / Update timetable entry
+  // ---------------------------------------------------------------------------
 
   Future<void> saveTimetableEntry({
     String? entryId,
@@ -67,11 +82,15 @@ class TimetableRepository {
     ];
 
     if (values.any((value) => value.trim().isEmpty)) {
-      throw ArgumentError('Tamam required fields fill karein.');
+      throw ArgumentError(
+        'Please complete all required fields.',
+      );
     }
 
     if (_timeToMinutes(endTime) <= _timeToMinutes(startTime)) {
-      throw ArgumentError('End time, start time ke baad hona chahiye.');
+      throw ArgumentError(
+        'End time must be later than start time.',
+      );
     }
 
     final data = <String, dynamic>{
@@ -92,36 +111,56 @@ class TimetableRepository {
 
     if (entryId == null || entryId.trim().isEmpty) {
       data['createdAt'] = FieldValue.serverTimestamp();
+
       await _timetable.add(data);
     } else {
-      final existing = await _timetable.doc(entryId).get();
+      final documentRef = _timetable.doc(entryId.trim());
+      final existing = await documentRef.get();
 
       if (!existing.exists ||
           existing.data()?['schoolId'] != schoolId.trim() ||
           existing.data()?['sectionId'] != sectionId.trim()) {
-        throw Exception('Timetable entry nahi mili ya access match nahi karta.');
+        throw Exception(
+          'Timetable entry was not found or access could not be verified.',
+        );
       }
 
-      await _timetable.doc(entryId).update(data);
+      await documentRef.update(data);
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Delete timetable entry
+  // ---------------------------------------------------------------------------
 
   Future<void> deleteTimetableEntry({
     required String entryId,
     required String schoolId,
     required String sectionId,
   }) async {
-    final ref = _timetable.doc(entryId);
+    if (entryId.trim().isEmpty) {
+      throw ArgumentError(
+        'Timetable entry ID is required.',
+      );
+    }
+
+    final ref = _timetable.doc(entryId.trim());
     final snapshot = await ref.get();
 
     if (!snapshot.exists ||
-        snapshot.data()?['schoolId'] != schoolId ||
-        snapshot.data()?['sectionId'] != sectionId) {
-      throw Exception('Entry nahi mili ya access match nahi karta.');
+        snapshot.data()?['schoolId'] != schoolId.trim() ||
+        snapshot.data()?['sectionId'] != sectionId.trim()) {
+      throw Exception(
+        'Timetable entry was not found or access could not be verified.',
+      );
     }
 
     await ref.delete();
   }
+
+  // ---------------------------------------------------------------------------
+  // Day sorting
+  // ---------------------------------------------------------------------------
 
   static int _dayOrder(String? day) {
     const days = [
@@ -137,11 +176,17 @@ class TimetableRepository {
     return days.indexOf(day ?? '');
   }
 
+  // ---------------------------------------------------------------------------
+  // Time validation
+  // ---------------------------------------------------------------------------
+
   static int _timeToMinutes(String value) {
-    final parts = value.split(':');
+    final parts = value.trim().split(':');
 
     if (parts.length != 2) {
-      throw ArgumentError('Time format HH:mm hona chahiye.');
+      throw ArgumentError(
+        'Time must use the HH:mm format.',
+      );
     }
 
     final hour = int.tryParse(parts[0]);
@@ -153,7 +198,9 @@ class TimetableRepository {
         hour > 23 ||
         minute < 0 ||
         minute > 59) {
-      throw ArgumentError('Time valid nahi hai.');
+      throw ArgumentError(
+        'Please enter a valid time.',
+      );
     }
 
     return hour * 60 + minute;
